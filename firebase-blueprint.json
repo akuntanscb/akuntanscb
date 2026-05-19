@@ -1,0 +1,66 @@
+{
+  "entities": {
+    "Account": {
+      "title": "Akun (COA)",
+      "description": "Daftar Akun (Chart of Accounts) untuk sistem akuntansi.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Kode Akun (misal: 1101)" },
+        "name": { "type": "string", "description": "Nama Akun" },
+        "category": { "type": "string", "enum": ["Aset", "Liabilitas", "Ekuitas", "Pendapatan", "Beban"], "description": "Kategori Utama" },
+        "subCategory": { "type": "string", "description": "Sub Kategori (misal: Kas, Bank, Piutang)" },
+        "initialBalance": { "type": "number", "description": "Saldo Awal" },
+        "isDeletable": { "type": "boolean", "description": "Apakah akun sistem yang tidak boleh dihapus" }
+      },
+      "required": ["code", "name", "category"]
+    },
+    "JournalEntry": {
+      "title": "Jurnal Umum",
+      "description": "Transaksi jurnal umum untuk pencatatan keuangan.",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string", "format": "date-time", "description": "Tanggal Transaksi" },
+        "description": { "type": "string", "description": "Keterangan Transaksi" },
+        "reference": { "type": "string", "description": "Nomor Referensi/Bukti" },
+        "lines": {
+          "type": "array",
+          "description": "Baris-baris jurnal (Debit & Kredit)"
+        },
+        "createdBy": { "type": "string", "description": "UID User pembuat" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Waktu Pembuatan" }
+      },
+      "required": ["date", "description", "lines", "createdBy", "createdAt"]
+    },
+    "Invoice": {
+      "title": "Faktur",
+      "description": "Faktur penagihan atau bukti donasi.",
+      "type": "object",
+      "properties": {
+        "invoiceNumber": { "type": "string", "description": "Nomor Faktur" },
+        "recipient": { "type": "string", "description": "Nama Penerima/Donatur" },
+        "date": { "type": "string", "format": "date-time", "description": "Tanggal Faktur" },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Tanggal Jatuh Tempo" },
+        "items": { "type": "array", "description": "Item yang ditagihkan" },
+        "total": { "type": "number", "description": "Total Nominal" },
+        "status": { "type": "string", "enum": ["Draft", "Sent", "Paid", "Cancelled"], "description": "Status Faktur" },
+        "notes": { "type": "string", "description": "Catatan tambahan" },
+        "createdBy": { "type": "string", "description": "UID User pembuat" }
+      },
+      "required": ["invoiceNumber", "recipient", "date", "total", "status", "createdBy"]
+    }
+  },
+  "firestore": {
+    "accounts": {
+      "schema": "Account",
+      "description": "Koleksi Chart of Accounts."
+    },
+    "journal_entries": {
+      "schema": "JournalEntry",
+      "description": "Koleksi Jurnal Umum."
+    },
+    "invoices": {
+      "schema": "Invoice",
+      "description": "Koleksi Faktur."
+    }
+  }
+}

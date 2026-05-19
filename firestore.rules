@@ -1,0 +1,79 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(data) {
+      return isSignedIn() && data.createdBy == request.auth.uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- COA (Accounts) ---
+    function isValidAccount(data) {
+      return data.code is string && data.code.size() <= 32 &&
+             data.name is string && data.name.size() <= 100 &&
+             data.category in ['Aset', 'Liabilitas', 'Ekuitas', 'Pendapatan', 'Beban'];
+    }
+
+    match /accounts/{accountId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidAccount(incoming());
+      allow update: if isSignedIn() && isValidAccount(incoming()) && (
+        !existing().get('isDeletable', true) == false || incoming().name != existing().name
+      );
+      allow delete: if isSignedIn() && existing().get('isDeletable', true) != false;
+    }
+
+    // --- Journal Entries ---
+    function isValidJournalEntry(data) {
+      return data.date is string &&
+             data.description is string && data.description.size() <= 500 &&
+             data.lines is list && data.lines.size() >= 2 &&
+             data.createdBy == request.auth.uid &&
+             data.createdAt == request.time;
+    }
+
+    match /journal_entries/{entryId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidJournalEntry(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidJournalEntry(incoming()) &&
+                    incoming().createdAt == existing().createdAt;
+      allow delete: if isSignedIn() && isOwner(existing());
+    }
+
+    // --- Invoices ---
+    function isValidInvoice(data) {
+      return data.invoiceNumber is string && data.invoiceNumber.size() <= 64 &&
+             data.recipient is string && data.recipient.size() <= 200 &&
+             data.total is number && data.total >= 0 &&
+             data.status in ['Draft', 'Sent', 'Paid', 'Cancelled'] &&
+             data.createdBy == request.auth.uid;
+    }
+
+    match /invoices/{invoiceId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidInvoice(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidInvoice(incoming());
+      allow delete: if isSignedIn() && isOwner(existing());
+    }
+  }
+}
