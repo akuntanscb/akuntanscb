@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import { Plus, Trash2, Save, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Plus, Trash2, Save, AlertCircle, Edit2, X } from 'lucide-react';
 import { getAccounts } from '../services/accountService';
-import { createJournalEntry, getJournalEntries } from '../services/journalService';
+import { createJournalEntry, getJournalEntries, updateJournalEntry, deleteJournalEntry } from '../services/journalService';
 import { Account, JournalLine, JournalEntry } from '../types';
 import { auth } from '../lib/firebase';
 import { formatRupiah, cn } from '../lib/utils';
@@ -23,6 +23,15 @@ export default function Journal() {
     { accountId: '', accountName: '', debit: 0, credit: 0 },
   ]);
   const [error, setError] = useState('');
+
+  // Edit & Delete States
+  const [isEditingMode, setIsEditingMode] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<JournalEntry | null>(null);
+
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [entryToDelete, setEntryToDelete] = useState<JournalEntry | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [isDeletingLoading, setIsDeletingLoading] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -56,6 +65,59 @@ export default function Journal() {
     setLines(newLines);
   };
 
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setIsEditingMode(false);
+    setEditingEntry(null);
+    setDescription('');
+    setReference('');
+    setDate(format(new Date(), 'yyyy-MM-dd'));
+    setLines([
+      { accountId: '', accountName: '', debit: 0, credit: 0 },
+      { accountId: '', accountName: '', debit: 0, credit: 0 },
+    ]);
+    setError('');
+  };
+
+  const handleEditClick = (entry: JournalEntry) => {
+    setIsEditingMode(true);
+    setEditingEntry(entry);
+    setDescription(entry.description);
+    setReference(entry.reference);
+    setDate(format(entry.date.toDate(), 'yyyy-MM-dd'));
+    setLines(entry.lines.map(line => ({
+      accountId: line.accountId,
+      accountName: line.accountName,
+      debit: line.debit,
+      credit: line.credit
+    })));
+    setShowForm(true);
+    setError('');
+  };
+
+  const handleDeleteClick = (entry: JournalEntry) => {
+    setEntryToDelete(entry);
+    setDeleteError('');
+    setDeleteConfirmOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!entryToDelete) return;
+    setIsDeletingLoading(true);
+    setDeleteError('');
+    try {
+      await deleteJournalEntry(entryToDelete.id);
+      setDeleteConfirmOpen(false);
+      setEntryToDelete(null);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setDeleteError(err.message || 'Gagal menghapus entri jurnal.');
+    } finally {
+      setIsDeletingLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -64,15 +126,21 @@ export default function Journal() {
       if (!auth.currentUser) throw new Error('Anda harus masuk untuk mencatat jurnal.');
       if (!description) throw new Error('Keterangan harus diisi.');
       
-      await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date));
+      if (isEditingMode && editingEntry) {
+        await updateJournalEntry(
+          editingEntry.id,
+          description,
+          reference,
+          lines,
+          new Date(date),
+          editingEntry.createdBy,
+          editingEntry.createdAt
+        );
+      } else {
+        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date));
+      }
       
-      setShowForm(false);
-      setDescription('');
-      setReference('');
-      setLines([
-        { accountId: '', accountName: '', debit: 0, credit: 0 },
-        { accountId: '', accountName: '', debit: 0, credit: 0 },
-      ]);
+      handleCancelForm();
       fetchData();
     } catch (err: any) {
       setError(err.message);
@@ -91,13 +159,19 @@ export default function Journal() {
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Pencatatan transaksi harian sekolah</p>
         </div>
         <button 
-          onClick={() => setShowForm(!showForm)}
+          onClick={() => {
+            if (showForm) {
+              handleCancelForm();
+            } else {
+              setShowForm(true);
+            }
+          }}
           className={cn(
             "px-6 py-2.5 rounded-full flex items-center gap-2 transition-all font-semibold shadow-sm",
             showForm ? "bg-rose-50 text-rose-600 border border-rose-200" : "bg-natural-primary text-white hover:opacity-90"
           )}
         >
-          {showForm ? <Trash2 className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
           {showForm ? 'Batal' : 'Entri Jurnal'}
         </button>
       </div>
@@ -108,6 +182,21 @@ export default function Journal() {
           animate={{ opacity: 1, scale: 1 }}
           className="bg-white p-8 rounded-3xl border border-natural-border shadow-xl"
         >
+          {isEditingMode && (
+            <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-sm flex justify-between items-center">
+              <div>
+                <h3 className="font-serif italic font-semibold text-amber-900 text-base">Ubah Jurnal Umum</h3>
+                <p className="text-xs text-amber-700">Sedang memperbarui entri jurnal yang dipilih. Pastikan total debit dan kredit seimbang sebelum disimpan.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCancelForm}
+                className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 rounded-full font-bold text-xs"
+              >
+                Batal Edit
+              </button>
+            </div>
+          )}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
@@ -232,7 +321,7 @@ export default function Journal() {
                 disabled={!isBalanced || totalDebit === 0}
                 className="bg-natural-primary hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-3 rounded-full font-bold transition-all shadow-lg flex items-center gap-2"
               >
-                <Save className="w-5 h-5" /> Simpan Jurnal
+                <Save className="w-5 h-5" /> {isEditingMode ? 'Perbarui Jurnal' : 'Simpan Jurnal'}
               </button>
             </div>
           </form>
@@ -250,6 +339,7 @@ export default function Journal() {
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
+              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -282,18 +372,112 @@ export default function Journal() {
                     <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
                       {line.credit > 0 ? formatRupiah(line.credit) : ''}
                     </td>
+                    {lIdx === 0 && (
+                      <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            onClick={() => handleEditClick(entry)}
+                            className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
+                            title="Edit Jurnal"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(entry)}
+                            className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
+                            title="Hapus Jurnal"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </React.Fragment>
             ))}
             {entries.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
+                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Delete Confirmation Modal overlay */}
+      <AnimatePresence>
+        {deleteConfirmOpen && entryToDelete && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl border border-natural-border shadow-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="p-6 border-b border-natural-border bg-rose-50/10 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif italic text-rose-700">Konfirmasi Penghapusan Jurnal</h3>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Tindakan ini permanen</p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {deleteError && (
+                  <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{deleteError}</span>
+                  </div>
+                )}
+
+                <p className="text-sm text-slate-700 leading-relaxed font-sans">
+                  Apakah Anda benar-benar yakin ingin menghapus entri jurnal ini secara permanen dari database keuangan? 
+                </p>
+
+                <div className="bg-natural-bg/60 border border-natural-border p-4 rounded-2xl space-y-1">
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Keterangan Jurnal</p>
+                  <p className="font-medium text-slate-800 text-sm">
+                    {entryToDelete.description}
+                  </p>
+                  {entryToDelete.reference && (
+                    <p className="text-xs text-slate-500">
+                      Ref: <span className="font-mono">{entryToDelete.reference}</span>
+                    </p>
+                  )}
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    Tanggal: {format(entryToDelete.date.toDate(), 'dd/MM/yyyy')}
+                  </p>
+                </div>
+
+                <div className="pt-4 border-t border-natural-border flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDeleteConfirmOpen(false);
+                      setEntryToDelete(null);
+                    }}
+                    disabled={isDeletingLoading}
+                    className="px-5 py-2.5 border border-natural-border rounded-full text-xs font-bold uppercase tracking-wider text-slate-550 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteConfirm}
+                    disabled={isDeletingLoading}
+                    className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-rose-600/10 transition-colors"
+                  >
+                    {isDeletingLoading ? 'Menghapus...' : 'Hapus Jurnal'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

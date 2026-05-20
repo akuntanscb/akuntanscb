@@ -1,4 +1,4 @@
-import { addDoc, collection, getDocs, orderBy, query, Timestamp, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDocs, orderBy, query, Timestamp, where, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { JournalEntry, JournalLine } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
@@ -66,4 +66,48 @@ export const getLedgerForAccount = async (accountId: string): Promise<any[]> => 
   });
 
   return ledgerLines.sort((a, b) => a.date.seconds - b.date.seconds);
+};
+
+export const updateJournalEntry = async (
+  id: string,
+  description: string,
+  reference: string,
+  lines: JournalLine[],
+  date: Date,
+  createdBy: string,
+  createdAt: any
+) => {
+  const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
+  const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+
+  if (Math.abs(totalDebit - totalCredit) > 0.01) {
+    throw new Error('Jurnal tidak seimbang! Total Debit harus sama dengan Total Kredit.');
+  }
+
+  const path = `journal_entries/${id}`;
+  try {
+    const docRef = doc(db, 'journal_entries', id);
+    await updateDoc(docRef, {
+      date: Timestamp.fromDate(date),
+      description,
+      reference,
+      lines,
+      createdBy,
+      createdAt
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+    throw error;
+  }
+};
+
+export const deleteJournalEntry = async (id: string) => {
+  const path = `journal_entries/${id}`;
+  try {
+    const docRef = doc(db, 'journal_entries', id);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+    throw error;
+  }
 };
