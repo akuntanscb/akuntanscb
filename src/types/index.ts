@@ -8,6 +8,8 @@ export interface Account {
   subCategory: string;
   initialBalance: number;
   isDeletable: boolean;
+  order?: number;
+  hideOnReport?: boolean;
 }
 
 export interface JournalLine {

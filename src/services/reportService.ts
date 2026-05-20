@@ -40,12 +40,24 @@ export const getAccountBalances = async (): Promise<AccountBalance[]> => {
 export const getFinancialReports = async () => {
   const balances = await getAccountBalances();
 
-  const aset = balances.filter(b => b.category === 'Aset');
-  const liabilitas = balances.filter(b => b.category === 'Liabilitas');
-  const ekuitas = balances.filter(b => b.category === 'Ekuitas');
-  const pendapatan = balances.filter(b => b.category === 'Pendapatan');
-  const beban = balances.filter(b => b.category === 'Beban');
+  const sortAccounts = (accs: AccountBalance[]) => {
+    return [...accs].sort((a, b) => {
+      const orderA = a.order !== undefined ? a.order : 9999;
+      const orderB = b.order !== undefined ? b.order : 9999;
+      if (orderA !== orderB) return orderA - orderB;
+      return a.code.localeCompare(b.code);
+    });
+  };
 
+  const visibleBalances = balances.filter(b => b.hideOnReport !== true);
+
+  const aset = sortAccounts(visibleBalances.filter(b => b.category === 'Aset'));
+  const liabilitas = sortAccounts(visibleBalances.filter(b => b.category === 'Liabilitas'));
+  const ekuitas = sortAccounts(visibleBalances.filter(b => b.category === 'Ekuitas'));
+  const pendapatan = sortAccounts(visibleBalances.filter(b => b.category === 'Pendapatan'));
+  const beban = sortAccounts(visibleBalances.filter(b => b.category === 'Beban'));
+
+  // Calculate totals from visible accounts to preserve consistency in report grids
   const totalAset = aset.reduce((s, a) => s + a.balance, 0);
   const totalLiabilitas = liabilitas.reduce((s, a) => s + a.balance, 0);
   const totalEkuitas = ekuitas.reduce((s, a) => s + a.balance, 0);
