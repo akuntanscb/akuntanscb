@@ -1,6 +1,7 @@
-import { collection, doc, getDocs, query, setDoc, where, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, query, setDoc, where, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { Account } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
 
 const INITIAL_COA: Partial<Account>[] = [
   // ASET
@@ -31,19 +32,69 @@ const INITIAL_COA: Partial<Account>[] = [
 ];
 
 export const initializeCOA = async () => {
-  const snapshot = await getDocs(collection(db, 'accounts'));
-  if (snapshot.empty) {
-    const batch = writeBatch(db);
-    INITIAL_COA.forEach((account) => {
-      const docRef = doc(collection(db, 'accounts'));
-      batch.set(docRef, { ...account, id: docRef.id });
-    });
-    await batch.commit();
-    console.log('COA Initialized');
+  const path = 'accounts';
+  try {
+    const snapshot = await getDocs(collection(db, path));
+    if (snapshot.empty) {
+      const batch = writeBatch(db);
+      INITIAL_COA.forEach((account) => {
+        const docRef = doc(collection(db, path));
+        batch.set(docRef, { ...account, id: docRef.id });
+      });
+      await batch.commit();
+      console.log('COA Initialized');
+    }
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
   }
 };
 
 export const getAccounts = async (): Promise<Account[]> => {
-  const snapshot = await getDocs(collection(db, 'accounts'));
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account));
+  const path = 'accounts';
+  try {
+    const snapshot = await getDocs(collection(db, path));
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Account));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    throw error;
+  }
+};
+
+export const createAccount = async (accountData: Omit<Account, 'id'>) => {
+  const path = 'accounts';
+  try {
+    const docRef = doc(collection(db, path));
+    const newAccount = {
+      ...accountData,
+      id: docRef.id,
+      isDeletable: accountData.isDeletable !== undefined ? accountData.isDeletable : true
+    };
+    await setDoc(docRef, newAccount);
+    return newAccount;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+    throw error;
+  }
+};
+
+export const updateAccount = async (accountId: string, accountData: Partial<Account>) => {
+  const path = `accounts/${accountId}`;
+  try {
+    const docRef = doc(db, 'accounts', accountId);
+    await updateDoc(docRef, accountData);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.UPDATE, path);
+    throw error;
+  }
+};
+
+export const deleteAccount = async (accountId: string) => {
+  const path = `accounts/${accountId}`;
+  try {
+    const docRef = doc(db, 'accounts', accountId);
+    await deleteDoc(docRef);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+    throw error;
+  }
 };

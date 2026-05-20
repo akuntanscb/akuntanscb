@@ -1,6 +1,7 @@
 import { addDoc, collection, getDocs, orderBy, query, Timestamp, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import { JournalEntry, JournalLine } from '../types';
+import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
 
 export const createJournalEntry = async (
   description: string,
@@ -16,22 +17,34 @@ export const createJournalEntry = async (
     throw new Error('Jurnal tidak seimbang! Total Debit harus sama dengan Total Kredit.');
   }
 
-  const docRef = await addDoc(collection(db, 'journal_entries'), {
-    date: Timestamp.fromDate(date),
-    description,
-    reference,
-    lines,
-    createdBy: userId,
-    createdAt: Timestamp.now()
-  });
+  const path = 'journal_entries';
+  try {
+    const docRef = await addDoc(collection(db, path), {
+      date: Timestamp.fromDate(date),
+      description,
+      reference,
+      lines,
+      createdBy: userId,
+      createdAt: Timestamp.now()
+    });
 
-  return docRef.id;
+    return docRef.id;
+  } catch (error) {
+    handleFirestoreError(error, OperationType.CREATE, path);
+    throw error;
+  }
 };
 
 export const getJournalEntries = async (): Promise<JournalEntry[]> => {
-  const q = query(collection(db, 'journal_entries'), orderBy('date', 'desc'));
-  const snapshot = await getDocs(q);
-  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JournalEntry));
+  const path = 'journal_entries';
+  try {
+    const q = query(collection(db, path), orderBy('date', 'desc'));
+    const snapshot = await getDocs(q);
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as JournalEntry));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.LIST, path);
+    throw error;
+  }
 };
 
 export const getLedgerForAccount = async (accountId: string): Promise<any[]> => {

@@ -267,7 +267,14 @@ export default function Journal() {
                       {lIdx === 0 ? entry.description : ''}
                     </td>
                     <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
-                      {line.accountName}
+                      <span className="inline-flex items-center gap-2">
+                        <span className="font-mono text-xs text-natural-primary/70 bg-natural-primary/5 px-1.5 py-0.5 rounded border border-natural-border">
+                          {accounts.find(a => a.id === line.accountId)?.code || ''}
+                        </span>
+                        <span className="font-medium text-slate-750">
+                          {accounts.find(a => a.id === line.accountId)?.name || line.accountName}
+                        </span>
+                      </span>
                     </td>
                     <td className="px-6 py-3 text-sm text-right font-mono text-emerald-600">
                       {line.debit > 0 ? formatRupiah(line.debit) : ''}
