@@ -68,7 +68,11 @@
           "description": "Daftar riwayat pembayaran angsuran/pelunasan"
         },
         "createdBy": { "type": "string", "description": "UID User pembuat" },
-        "createdAt": { "type": "string", "format": "date-time", "description": "Waktu pembuatan data" }
+        "createdAt": { "type": "string", "format": "date-time", "description": "Waktu pembuatan data" },
+        "isUangMuka": { "type": "boolean", "description": "Indikator jika transaksi ini adalah Panjar/Uang Muka (Cash Basis)" },
+        "picName": { "type": "string", "description": "Nama Penanggung Jawab (PIC) atas uang muka" },
+        "dpRefNumber": { "type": "string", "description": "Nomor Referensi Uang Muka" },
+        "journalId": { "type": "string", "description": "ID Jurnal Umum terkait untuk sinkronisasi" }
       },
       "required": ["type", "name", "date", "dueDate", "totalAmount", "downPayment", "paidAmount", "remainingBalance", "status", "createdBy", "createdAt"]
     }

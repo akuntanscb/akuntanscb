@@ -18,6 +18,15 @@ import { getAccounts } from './accountService';
 
 const COLLECTION_PATH = 'debts_receivables';
 
+export const generateDpRefNumber = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(100 + Math.random() * 900);
+  return `UM-${year}${month}${day}-${rand}`;
+};
+
 export const getDebts = async (): Promise<DebtReceivable[]> => {
   try {
     const q = query(collection(db, COLLECTION_PATH), orderBy('date', 'desc'));
@@ -37,15 +46,17 @@ export const createDebt = async (
   totalAmount: number,
   downPayment: number,
   remarks: string,
-  userId: string
+  userId: string,
+  isUangMuka: boolean = false,
+  picName: string = ''
 ): Promise<string> => {
   try {
-    const remainingBalance = totalAmount - downPayment;
+    const remainingBalance = isUangMuka ? totalAmount : (totalAmount - downPayment);
     let status: 'Belum Lunas' | 'Lunas' | 'Sebagian' = 'Belum Lunas';
     
     if (remainingBalance <= 0) {
       status = 'Lunas';
-    } else if (downPayment > 0) {
+    } else if (!isUangMuka && downPayment > 0) {
       status = 'Sebagian';
     }
 
@@ -57,21 +68,33 @@ export const createDebt = async (
     let revenueAccount = accounts.find(a => a.category === 'Pendapatan') || accounts.find(a => a.code === '4103');
     let expenseAccount = accounts.find(a => a.category === 'Beban') || accounts.find(a => a.code === '5301');
 
+    let uangMukaAccount = accounts.find(a => a.name.toLowerCase().includes('uang muka') || a.name.toLowerCase().includes('panjar') || a.name.toLowerCase().includes('dp'));
+    if (!uangMukaAccount) {
+      uangMukaAccount = piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' } as any;
+    }
+
     const lines: any[] = [];
     const remaining = totalAmount - downPayment;
 
     if (type === 'Piutang') {
-      const pAcc = piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' };
+      const pAcc = isUangMuka ? (uangMukaAccount || { id: 'temp-piutang', name: 'Piutang Donatur' }) : (piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' });
       const kAcc = kasAccount || { id: 'temp-kas', name: 'Kas Kecil' };
       const rAcc = revenueAccount || { id: 'temp-rev', name: 'Dana Hibah/Donasi' };
 
-      if (remaining > 0) {
-        lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: remaining, credit: 0 });
+      if (isUangMuka) {
+        // Disbursement of cash advance (Uang Muka)
+        // Debit: Uang Muka Account (receivable aset), Credit: Kas
+        lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: totalAmount, credit: 0 });
+        lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: 0, credit: totalAmount });
+      } else {
+        if (remaining > 0) {
+          lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: remaining, credit: 0 });
+        }
+        if (downPayment > 0) {
+          lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: downPayment, credit: 0 });
+        }
+        lines.push({ accountId: rAcc.id, accountName: rAcc.name, debit: 0, credit: totalAmount });
       }
-      if (downPayment > 0) {
-        lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: downPayment, credit: 0 });
-      }
-      lines.push({ accountId: rAcc.id, accountName: rAcc.name, debit: 0, credit: totalAmount });
     } else {
       const hAcc = hutangAccount || { id: 'temp-hutang', name: 'Hutang Operasional' };
       const kAcc = kasAccount || { id: 'temp-kas', name: 'Kas Kecil' };
@@ -86,14 +109,17 @@ export const createDebt = async (
       }
     }
 
+    const refNum = isUangMuka ? generateDpRefNumber() : '';
+
     // 2. Draft & save automatically balanced Journal entry
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
       date: Timestamp.fromDate(date),
-      description: `Kontrol ${type}: ${name} (${remarks || 'Tanpa Keterangan'})`,
-      reference: type === 'Piutang' ? 'PT-AUTO' : 'HT-AUTO',
+      description: isUangMuka ? `Disbursement Panjar/Uang Muka ke PIC: ${picName || 'Tanpa PIC'} (${remarks || 'Tanpa Keterangan'})` : `Kontrol ${type}: ${name} (${remarks || 'Tanpa Keterangan'})`,
+      reference: isUangMuka ? 'UM-AUTO' : (type === 'Piutang' ? 'PT-AUTO' : 'HT-AUTO'),
       lines,
       createdBy: userId,
-      createdAt: Timestamp.now()
+      createdAt: Timestamp.now(),
+      picName: picName || ''
     });
 
     // 3. Save matching control monitoring sheet entry linking to the journal
@@ -103,15 +129,18 @@ export const createDebt = async (
       date: Timestamp.fromDate(date),
       dueDate: Timestamp.fromDate(dueDate),
       totalAmount,
-      downPayment,
+      downPayment: isUangMuka ? 0 : downPayment,
       paidAmount: 0,
       remainingBalance,
-      remarks: remarks || `Pencatatan ${type} ${name}`,
+      remarks: remarks || `Pencatatan ${isUangMuka ? 'Uang Muka' : type} ${name}`,
       status,
       payments: [],
       createdBy: userId,
       createdAt: Timestamp.now(),
-      journalId: journalRef.id
+      journalId: journalRef.id,
+      isUangMuka,
+      picName,
+      dpRefNumber: refNum
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_PATH), docData);
@@ -210,6 +239,7 @@ export const updateDebtDetails = async (
     totalAmount: number;
     downPayment: number;
     remarks: string;
+    picName?: string;
   }
 ): Promise<void> => {
   const docRef = doc(db, COLLECTION_PATH, debtId);
@@ -221,6 +251,7 @@ export const updateDebtDetails = async (
 
     const currentData = docSnap.data() as DebtReceivable;
     const journalId = (currentData as any).journalId;
+    const isUangMuka = !!currentData.isUangMuka;
 
     // 1. If linked to a journal entry, update the journal entry first!
     if (journalId) {
@@ -234,23 +265,34 @@ export const updateDebtDetails = async (
         let revenueAccount = accounts.find(a => a.category === 'Pendapatan') || accounts.find(a => a.code === '4103');
         let expenseAccount = accounts.find(a => a.category === 'Beban') || accounts.find(a => a.code === '5301');
 
+        let uangMukaAccount = accounts.find(a => a.name.toLowerCase().includes('uang muka') || a.name.toLowerCase().includes('panjar') || a.name.toLowerCase().includes('dp'));
+        if (!uangMukaAccount) {
+          uangMukaAccount = piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' } as any;
+        }
+
         const lines: any[] = [];
-        const remaining = updateData.totalAmount - updateData.downPayment;
         const type = currentData.type;
 
         if (type === 'Piutang') {
-          const pAcc = piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' };
+          const pAcc = isUangMuka ? (uangMukaAccount || { id: 'temp-piutang', name: 'Piutang Donatur' }) : (piutangAccount || { id: 'temp-piutang', name: 'Piutang Donatur' });
           const kAcc = kasAccount || { id: 'temp-kas', name: 'Kas Kecil' };
           const rAcc = revenueAccount || { id: 'temp-rev', name: 'Dana Hibah/Donasi' };
 
-          if (remaining > 0) {
-            lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: remaining, credit: 0 });
+          if (isUangMuka) {
+            lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: updateData.totalAmount, credit: 0 });
+            lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: 0, credit: updateData.totalAmount });
+          } else {
+            const remaining = updateData.totalAmount - updateData.downPayment;
+            if (remaining > 0) {
+              lines.push({ accountId: pAcc.id, accountName: pAcc.name, debit: remaining, credit: 0 });
+            }
+            if (updateData.downPayment > 0) {
+              lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: updateData.downPayment, credit: 0 });
+            }
+            lines.push({ accountId: rAcc.id, accountName: rAcc.name, debit: 0, credit: updateData.totalAmount });
           }
-          if (updateData.downPayment > 0) {
-            lines.push({ accountId: kAcc.id, accountName: kAcc.name, debit: updateData.downPayment, credit: 0 });
-          }
-          lines.push({ accountId: rAcc.id, accountName: rAcc.name, debit: 0, credit: updateData.totalAmount });
         } else {
+          const remaining = updateData.totalAmount - updateData.downPayment;
           const hAcc = hutangAccount || { id: 'temp-hutang', name: 'Hutang Operasional' };
           const kAcc = kasAccount || { id: 'temp-kas', name: 'Kas Kecil' };
           const eAcc = expenseAccount || { id: 'temp-exp', name: 'Beban Operasional' };
@@ -266,17 +308,18 @@ export const updateDebtDetails = async (
 
         await updateDoc(journalDocRef, {
           date: Timestamp.fromDate(updateData.date),
-          description: `Kontrol ${type}: ${updateData.name} (${updateData.remarks || 'Tanpa Keterangan'})`,
-          lines
+          description: isUangMuka ? `Disbursement Panjar/Uang Muka ke PIC: ${updateData.picName || 'Tanpa PIC'} (${updateData.remarks || 'Tanpa Keterangan'})` : `Kontrol ${type}: ${updateData.name} (${updateData.remarks || 'Tanpa Keterangan'})`,
+          lines,
+          picName: updateData.picName || ''
         });
       }
     }
 
     // 2. Recalculate and update the debt control record details
     const totalAmount = updateData.totalAmount;
-    const downPayment = updateData.downPayment;
+    const downPayment = isUangMuka ? 0 : updateData.downPayment;
     const paidAmount = currentData.paidAmount || 0;
-    const remainingBalance = totalAmount - downPayment - paidAmount;
+    const remainingBalance = isUangMuka ? (totalAmount - paidAmount) : (totalAmount - downPayment - paidAmount);
     
     let status: 'Belum Lunas' | 'Lunas' | 'Sebagian' = 'Belum Lunas';
     if (remainingBalance <= 0) {
@@ -285,7 +328,7 @@ export const updateDebtDetails = async (
       status = 'Sebagian';
     }
 
-    await updateDoc(docRef, {
+    const payload: any = {
       name: updateData.name,
       date: Timestamp.fromDate(updateData.date),
       dueDate: Timestamp.fromDate(updateData.dueDate),
@@ -294,7 +337,13 @@ export const updateDebtDetails = async (
       remainingBalance: Math.max(0, remainingBalance),
       status,
       remarks: updateData.remarks
-    });
+    };
+
+    if (updateData.picName !== undefined) {
+      payload.picName = updateData.picName;
+    }
+
+    await updateDoc(docRef, payload);
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `${COLLECTION_PATH}/${debtId}`);
     throw error;
@@ -347,7 +396,13 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       if (!account) continue;
 
       const isPiutangAccount = account.category === 'Aset' && 
-        (account.subCategory.toLowerCase().includes('piutang') || account.name.toLowerCase().includes('piutang'));
+        (account.subCategory.toLowerCase().includes('piutang') || 
+         account.subCategory.toLowerCase().includes('uang muka') ||
+         account.subCategory.toLowerCase().includes('panjar') ||
+         account.name.toLowerCase().includes('piutang') ||
+         account.name.toLowerCase().includes('uang muka') ||
+         account.name.toLowerCase().includes('panjar') ||
+         account.name.toLowerCase().includes('dp'));
       
       const isHutangAccount = account.category === 'Liabilitas' && 
         (account.subCategory.toLowerCase().includes('hutang') || account.subCategory.toLowerCase().includes('kewajiban') || account.name.toLowerCase().includes('hutang'));
@@ -355,6 +410,12 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       // If it's a Piutang account:
       // - Debit > 0: A new Receivable is being recorded!
       if (isPiutangAccount && line.debit > 0) {
+        const isUM = account.name.toLowerCase().includes('uang muka') || 
+                     account.name.toLowerCase().includes('panjar') || 
+                     account.name.toLowerCase().includes('dp') ||
+                     account.subCategory.toLowerCase().includes('uang muka') ||
+                     account.subCategory.toLowerCase().includes('panjar');
+
         // Find other complimenting lines to compute possible down payments
         const creditLine = lines.find((l: any) => l.credit > 0 && l.accountId !== line.accountId);
         const totalCredit = creditLine ? creditLine.credit : line.debit;
@@ -362,30 +423,35 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
         let downPayment = 0;
         let totalAmount = line.debit;
         
-        if (totalCredit > line.debit) {
+        if (!isUM && totalCredit > line.debit) {
           totalAmount = totalCredit;
           downPayment = totalCredit - line.debit;
         }
 
         // Check if there is an explicit Cash/Bank line or Uang Muka in the journal representing the down payment
-        const hasDownPaymentLine = lines.find((l: any) => {
-          const acc = accounts.find((a: any) => a.id === l.accountId);
-          return acc && (acc.name.toLowerCase().includes('uang muka') || acc.name.toLowerCase().includes('dp') || acc.name.toLowerCase().includes('panjar'));
-        });
-        if (hasDownPaymentLine) {
-          downPayment = Math.max(downPayment, hasDownPaymentLine.debit || hasDownPaymentLine.credit || 0);
+        if (!isUM) {
+          const hasDownPaymentLine = lines.find((l: any) => {
+            const acc = accounts.find((a: any) => a.id === l.accountId);
+            return acc && (acc.name.toLowerCase().includes('uang muka') || acc.name.toLowerCase().includes('dp') || acc.name.toLowerCase().includes('panjar'));
+          });
+          if (hasDownPaymentLine) {
+            downPayment = Math.max(downPayment, hasDownPaymentLine.debit || hasDownPaymentLine.credit || 0);
+          }
         }
 
-        const remainingBalance = totalAmount - downPayment;
+        const remainingBalance = isUM ? totalAmount : (totalAmount - downPayment);
         let status: 'Belum Lunas' | 'Lunas' | 'Sebagian' = 'Belum Lunas';
         if (remainingBalance <= 0) {
           status = 'Lunas';
-        } else if (downPayment > 0) {
+        } else if (!isUM && downPayment > 0) {
           status = 'Sebagian';
         }
 
         const dueDate = new Date(date);
         dueDate.setDate(dueDate.getDate() + 30);
+
+        const refNum = isUM ? generateDpRefNumber() : '';
+        const pic = journalEntry.picName || '';
 
         await addDoc(collection(db, COLLECTION_PATH), {
           type: 'Piutang',
@@ -393,15 +459,18 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           date: Timestamp.fromDate(date),
           dueDate: Timestamp.fromDate(dueDate),
           totalAmount,
-          downPayment,
+          downPayment: isUM ? 0 : downPayment,
           paidAmount: 0,
           remainingBalance,
-          remarks: `Otomatis dari Jurnal Umum (Ref: ${reference})`,
+          remarks: isUM ? `Uang Muka Otomatis Jurnal (Ref: ${reference})` : `Otomatis dari Jurnal Umum (Ref: ${reference})`,
           status,
           payments: [],
           createdBy,
           createdAt: Timestamp.now(),
-          journalId
+          journalId,
+          isUangMuka: isUM,
+          picName: pic,
+          dpRefNumber: refNum
         });
       }
 

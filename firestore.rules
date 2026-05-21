@@ -88,7 +88,11 @@ service cloud.firestore {
              data.payments is list &&
              data.createdBy == request.auth.uid &&
              (data.createdAt is timestamp || data.createdAt is string) &&
-             (!('remarks' in data) || (data.remarks is string && data.remarks.size() <= 1000));
+             (!('remarks' in data) || (data.remarks is string && data.remarks.size() <= 1000)) &&
+             (!('isUangMuka' in data) || data.isUangMuka is bool) &&
+             (!('picName' in data) || (data.picName is string && data.picName.size() <= 300)) &&
+             (!('dpRefNumber' in data) || (data.dpRefNumber is string && data.dpRefNumber.size() <= 100)) &&
+             (!('journalId' in data) || (data.journalId is string && data.journalId.size() <= 100));
     }
 
     match /debts_receivables/{debtId} {

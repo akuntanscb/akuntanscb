@@ -17,6 +17,7 @@ export interface JournalLine {
   accountName: string;
   debit: number;
   credit: number;
+  picName?: string; // PIC name for cash advances/dp
 }
 
 export interface JournalEntry {
@@ -27,6 +28,7 @@ export interface JournalEntry {
   lines: JournalLine[];
   createdBy: string;
   createdAt: any;
+  picName?: string; // General PIC name for the entry
 }
 
 export interface InvoiceItem {
@@ -71,5 +73,9 @@ export interface DebtReceivable {
   payments?: DebtPayment[];
   createdBy: string;
   createdAt: any;
+  isUangMuka?: boolean;
+  picName?: string;
+  dpRefNumber?: string;
+  journalId?: string;
 }
 

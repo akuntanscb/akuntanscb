@@ -18,6 +18,7 @@ export default function Journal() {
   const [description, setDescription] = useState('');
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [picName, setPicName] = useState('');
   const [lines, setLines] = useState<JournalLine[]>([
     { accountId: '', accountName: '', debit: 0, credit: 0 },
     { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -71,6 +72,7 @@ export default function Journal() {
     setEditingEntry(null);
     setDescription('');
     setReference('');
+    setPicName('');
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setLines([
       { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -84,6 +86,7 @@ export default function Journal() {
     setEditingEntry(entry);
     setDescription(entry.description);
     setReference(entry.reference);
+    setPicName((entry as any).picName || '');
     setDate(format(entry.date.toDate(), 'yyyy-MM-dd'));
     setLines(entry.lines.map(line => ({
       accountId: line.accountId,
@@ -134,10 +137,11 @@ export default function Journal() {
           lines,
           new Date(date),
           editingEntry.createdBy,
-          editingEntry.createdAt
+          editingEntry.createdAt,
+          picName
         );
       } else {
-        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date));
+        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName);
       }
       
       handleCancelForm();
@@ -198,14 +202,14 @@ export default function Journal() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Tanggal</label>
                 <input 
                   type="date" 
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
                 />
               </div>
               <div>
@@ -215,7 +219,7 @@ export default function Journal() {
                   placeholder="Mis: BM-001"
                   value={reference}
                   onChange={(e) => setReference(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
                 />
               </div>
               <div>
@@ -225,7 +229,20 @@ export default function Journal() {
                   placeholder="Deskripsi transaksi"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2 flex justify-between">
+                  <span>PIC (Penanggung Jawab DP)</span>
+                  <span className="text-[10px] text-gray-400 font-normal uppercase select-none">Opsional</span>
+                </label>
+                <input 
+                  type="text" 
+                  placeholder="Nama PIC Uang Muka"
+                  value={picName}
+                  onChange={(e) => setPicName(e.target.value)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
                 />
               </div>
             </div>
@@ -354,7 +371,16 @@ export default function Journal() {
                       {lIdx === 0 ? entry.reference : ''}
                     </td>
                     <td className="px-6 py-3 text-sm text-slate-700 font-medium">
-                      {lIdx === 0 ? entry.description : ''}
+                      {lIdx === 0 ? (
+                        <div>
+                          <div>{entry.description}</div>
+                          {(entry as any).picName && (
+                            <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-semibold uppercase tracking-wider">
+                              PIC: {(entry as any).picName}
+                            </div>
+                          )}
+                        </div>
+                      ) : ''}
                     </td>
                     <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
                       <span className="inline-flex items-center gap-2">

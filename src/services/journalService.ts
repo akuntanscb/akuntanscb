@@ -9,7 +9,8 @@ export const createJournalEntry = async (
   reference: string,
   lines: JournalLine[],
   userId: string,
-  date: Date = new Date()
+  date: Date = new Date(),
+  picName?: string
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
@@ -27,7 +28,8 @@ export const createJournalEntry = async (
       reference,
       lines,
       createdBy: userId,
-      createdAt: createdAtTime
+      createdAt: createdAtTime,
+      picName: picName || ''
     });
 
     const journalId = docRef.id;
@@ -39,7 +41,8 @@ export const createJournalEntry = async (
         reference,
         lines,
         createdBy: userId,
-        createdAt: createdAtTime
+        createdAt: createdAtTime,
+        picName: picName || ''
       });
     } catch (syncErr) {
       console.error("Gagal melakukan sinkronisasi kontrol hutang piutang:", syncErr);
@@ -92,10 +95,11 @@ export const updateJournalEntry = async (
   lines: JournalLine[],
   date: Date,
   createdBy: string,
-  createdAt: any
+  createdAt: any,
+  picName?: string
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
-  const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
+  const totalCredit = lines.reduce((sum, line) => sum+ line.credit, 0);
 
   if (Math.abs(totalDebit - totalCredit) > 0.01) {
     throw new Error('Jurnal tidak seimbang! Total Debit harus sama dengan Total Kredit.');
@@ -110,7 +114,8 @@ export const updateJournalEntry = async (
       reference,
       lines,
       createdBy,
-      createdAt
+      createdAt,
+      picName: picName || ''
     });
 
     try {
@@ -121,7 +126,8 @@ export const updateJournalEntry = async (
         reference,
         lines,
         createdBy,
-        createdAt
+        createdAt,
+        picName: picName || ''
       });
     } catch (syncErr) {
       console.error("Gagal memperbarui sinkronisasi kontrol hutang piutang:", syncErr);

@@ -64,6 +64,8 @@ export default function HutangPiutang() {
   const [formDownPayment, setFormDownPayment] = useState<number>(0);
   const [formRemarks, setFormRemarks] = useState<string>('');
   const [editId, setEditId] = useState<string | null>(null);
+  const [isUangMuka, setIsUangMuka] = useState<boolean>(false);
+  const [picName, setPicName] = useState<string>('');
 
   // Form Fields for Payment
   const [payDate, setPayDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -209,12 +211,16 @@ export default function HutangPiutang() {
       setFormError('Nominal transaksi harus lebih besar dari Rp 0!');
       return;
     }
-    if (formDownPayment < 0) {
+    if (!isUangMuka && formDownPayment < 0) {
       setFormError('Uang muka tidak boleh negatif!');
       return;
     }
-    if (formDownPayment > formTotal) {
+    if (!isUangMuka && formDownPayment > formTotal) {
       setFormError('Uang muka tidak boleh melebihi nilai nominal transaksi!');
+      return;
+    }
+    if (isUangMuka && !picName.trim()) {
+      setFormError('Nama PIC Penerima Uang Muka wajib diisi untuk transaksi Uang Muka!');
       return;
     }
 
@@ -229,8 +235,9 @@ export default function HutangPiutang() {
           date: dDate,
           dueDate: dDueDate,
           totalAmount: formTotal,
-          downPayment: formDownPayment,
-          remarks: formRemarks
+          downPayment: isUangMuka ? 0 : formDownPayment,
+          remarks: formRemarks,
+          picName: isUangMuka ? picName : ''
         });
         showToast('Berhasil mengubah data transaksi.');
       } else {
@@ -240,9 +247,11 @@ export default function HutangPiutang() {
           dDate,
           dDueDate,
           formTotal,
-          formDownPayment,
+          isUangMuka ? 0 : formDownPayment,
           formRemarks,
-          userId
+          userId,
+          isUangMuka,
+          isUangMuka ? picName : ''
         );
         showToast('Berhasil mencatat transaksi hutang-piutang baru.');
       }
@@ -266,6 +275,8 @@ export default function HutangPiutang() {
     setFormDownPayment(0);
     setFormRemarks('');
     setEditId(null);
+    setIsUangMuka(false);
+    setPicName('');
     setFormError('');
   };
 
@@ -279,6 +290,8 @@ export default function HutangPiutang() {
     setFormTotal(debt.totalAmount);
     setFormDownPayment(debt.downPayment || 0);
     setFormRemarks(debt.remarks || '');
+    setIsUangMuka(!!debt.isUangMuka);
+    setPicName((debt as any).picName || '');
     setIsAddEditOpen(true);
   };
 
@@ -341,7 +354,9 @@ export default function HutangPiutang() {
     return debts
       .filter((d) => {
         const matchesQuery = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                             (d.remarks && d.remarks.toLowerCase().includes(searchQuery.toLowerCase()));
+                             (d.remarks && d.remarks.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                             (d.dpRefNumber && d.dpRefNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                             ((d as any).picName && (d as any).picName.toLowerCase().includes(searchQuery.toLowerCase()));
         
         const matchesType = filterType === 'All' ? true : d.type === filterType;
         
@@ -616,14 +631,19 @@ export default function HutangPiutang() {
                   return (
                     <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
                       {/* Name & Type Column */}
-                      <td className="px-6 py-4 space-y-1">
-                        <div className="flex items-center gap-2">
+                      <td className="px-6 py-4 space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span className={cn(
                             "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase",
                             item.type === 'Piutang' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
                           )}>
                             {item.type}
                           </span>
+                          {item.isUangMuka && (
+                            <span className="bg-emerald-100 border border-emerald-300 text-emerald-800 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                              Uang Muka (DP)
+                            </span>
+                          )}
                           {item.journalId && (
                             <span className="bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
                               Synced Jurnal
@@ -635,8 +655,24 @@ export default function HutangPiutang() {
                             </span>
                           )}
                         </div>
-                        <p className="font-semibold text-slate-800 text-sm font-sans">{item.name}</p>
-                        <p className="text-[10px] text-gray-400 font-sans max-w-xs truncate">{item.remarks || 'Tanpa keterangan'}</p>
+                        <div>
+                          <p className="font-semibold text-slate-850 text-sm font-sans">{item.name}</p>
+                          <p className="text-[10px] text-gray-400 font-sans max-w-xs truncate">{item.remarks || 'Tanpa keterangan'}</p>
+                        </div>
+                        {item.isUangMuka && (
+                          <div className="flex flex-wrap items-center gap-2 mt-1 select-none">
+                            {item.dpRefNumber && (
+                              <span className="font-mono text-[9px] text-emerald-800 bg-emerald-50/50 px-2 py-0.5 rounded-md border border-emerald-150 font-semibold uppercase">
+                                Ref: {item.dpRefNumber}
+                              </span>
+                            )}
+                            {(item as any).picName && (
+                              <span className="text-[9px] text-slate-600 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200 font-medium inline-flex items-center gap-1">
+                                <User className="w-3 h-3 text-slate-400 shrink-0" /> PIC: {(item as any).picName}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
 
                       {/* Amounts Breakdown Column */}
@@ -894,28 +930,73 @@ export default function HutangPiutang() {
                   <p className="text-[10px] text-gray-400 mt-1">Format: {formatRupiah(formTotal)}</p>
                 </div>
 
-                {/* Down payment DP */}
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label htmlFor="formDownPayment" className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
-                      Setoran Uang Muka / Panjar (DP)
-                    </label>
-                    <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
-                      Uang Muka
-                    </span>
+                {/* Uang Muka Toggle for Piutang */}
+                {formType === 'Piutang' && (
+                  <div className="bg-emerald-50/50 p-4 rounded-2xl border border-emerald-100/70 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <input 
+                        id="isUangMuka"
+                        type="checkbox"
+                        checked={isUangMuka}
+                        onChange={(e) => {
+                          setIsUangMuka(e.target.checked);
+                          if (e.target.checked) {
+                            setFormDownPayment(0);
+                          }
+                        }}
+                        className="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 accent-emerald-650 cursor-pointer"
+                      />
+                      <label htmlFor="isUangMuka" className="text-xs font-semibold text-emerald-900 cursor-pointer select-none">
+                        Jadikan sebagai Transaksi Uang Muka / Panjar (Cash Basis)
+                      </label>
+                    </div>
+
+                    {isUangMuka && (
+                      <div className="space-y-1.5 pl-6">
+                        <label htmlFor="formPicName" className="block text-[10px] uppercase tracking-widest text-emerald-800 font-bold mb-1">
+                          Nama PIC Penerima Uang Muka
+                        </label>
+                        <input 
+                          id="formPicName"
+                          type="text"
+                          required={isUangMuka}
+                          placeholder="Masukkan nama penanggung jawab / PIC (Mis: Agus Prasetyo)"
+                          value={picName}
+                          onChange={(e) => setPicName(e.target.value)}
+                          className="w-full px-4 py-2.5 border border-emerald-200 rounded-xl bg-white text-xs text-slate-800 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                        />
+                        <p className="text-[10px] text-emerald-700 font-sans leading-relaxed">
+                          Nomor referensi uang muka akan di-generate otomatis untuk pelaporan & integrasi penutupan kas basis.
+                        </p>
+                      </div>
+                    )}
                   </div>
-                  <input
-                    id="formDownPayment"
-                    type="number"
-                    min={0}
-                    step={1000}
-                    placeholder="Kosongkan jika tidak ada setoran panjar (DP) diawal"
-                    value={formDownPayment || ''}
-                    onChange={(e) => setFormDownPayment(Math.max(0, parseFloat(e.target.value) || 0))}
-                    className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl font-mono text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary"
-                  />
-                  <p className="text-[10px] text-gray-400 mt-1">Sisa saldo awal tertunggak: <span className="font-bold font-mono text-slate-700">{formatRupiah(formTotal - formDownPayment)}</span></p>
-                </div>
+                )}
+
+                {/* Down payment DP (Hidden if isUangMuka is true) */}
+                {!isUangMuka && (
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label htmlFor="formDownPayment" className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
+                        Setoran Uang Muka / Panjar (DP)
+                      </label>
+                      <span className="text-[9px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold uppercase tracking-wide">
+                        Uang Muka
+                      </span>
+                    </div>
+                    <input
+                      id="formDownPayment"
+                      type="number"
+                      min={0}
+                      step={1000}
+                      placeholder="Kosongkan jika tidak ada setoran panjar (DP) diawal"
+                      value={formDownPayment || ''}
+                      onChange={(e) => setFormDownPayment(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl font-mono text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary"
+                    />
+                    <p className="text-[10px] text-gray-400 mt-1">Sisa saldo awal tertunggak: <span className="font-bold font-mono text-slate-700">{formatRupiah(formTotal - formDownPayment)}</span></p>
+                  </div>
+                )}
 
                 {/* Remarks/Keterangan */}
                 <div>
