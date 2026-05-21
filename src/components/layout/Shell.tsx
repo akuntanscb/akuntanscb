@@ -47,6 +47,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { name: 'Jurnal Umum', path: '/jurnal', icon: BookOpen },
     { name: 'Buku Besar', path: '/buku-besar', icon: BookOpen },
     { name: 'Faktur', path: '/faktur', icon: Receipt },
+    { name: 'Hutang & Piutang', path: '/hutang-piutang', icon: Users },
     { name: 'Laporan Keuangan', path: '/laporan', icon: PieChart },
     { name: 'Daftar Akun', path: '/coa', icon: Settings },
   ];

@@ -48,3 +48,28 @@ export interface Invoice {
   notes: string;
   createdBy: string;
 }
+
+export interface DebtPayment {
+  id: string;
+  date: any;
+  amount: number;
+  notes: string;
+}
+
+export interface DebtReceivable {
+  id: string;
+  type: 'Hutang' | 'Piutang';
+  name: string;
+  date: any;
+  dueDate: any;
+  totalAmount: number;
+  downPayment: number;
+  paidAmount: number;
+  remainingBalance: number;
+  remarks: string;
+  status: 'Belum Lunas' | 'Lunas' | 'Sebagian';
+  payments?: DebtPayment[];
+  createdBy: string;
+  createdAt: any;
+}
+

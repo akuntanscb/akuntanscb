@@ -8,6 +8,7 @@ const Ledger = lazy(() => import('./pages/Ledger'));
 const Invoices = lazy(() => import('./pages/Invoices'));
 const Reports = lazy(() => import('./pages/Reports'));
 const COA = lazy(() => import('./pages/COA'));
+const HutangPiutang = lazy(() => import('./pages/HutangPiutang'));
 
 export default function App() {
   return (
@@ -21,6 +22,7 @@ export default function App() {
             <Route path="/faktur" element={<Invoices />} />
             <Route path="/laporan" element={<Reports />} />
             <Route path="/coa" element={<COA />} />
+            <Route path="/hutang-piutang" element={<HutangPiutang />} />
           </Routes>
         </Suspense>
       </Shell>

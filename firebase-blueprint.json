@@ -47,6 +47,30 @@
         "createdBy": { "type": "string", "description": "UID User pembuat" }
       },
       "required": ["invoiceNumber", "recipient", "date", "total", "status", "createdBy"]
+    },
+    "DebtReceivable": {
+      "title": "Hutang & Piutang",
+      "description": "Pencatatan transaksi hutang atau piutang termasuk uang muka, pembayaran, dan informasi umur.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["Hutang", "Piutang"], "description": "Tipe Transaksi" },
+        "name": { "type": "string", "description": "Nama Debitur / Kreditur" },
+        "date": { "type": "string", "format": "date-time", "description": "Tanggal Mulai Keuangan" },
+        "dueDate": { "type": "string", "format": "date-time", "description": "Tanggal Jatuh Tempo" },
+        "totalAmount": { "type": "number", "description": "Nominal Transaksi Asli (Rp)" },
+        "downPayment": { "type": "number", "description": "Uang Muka / Uang Panjar awal" },
+        "paidAmount": { "type": "number", "description": "Total Nominal yang Telah Dibayar melalui Cicilan" },
+        "remainingBalance": { "type": "number", "description": "Sisa Sisa Hutang/Piutang" },
+        "remarks": { "type": "string", "description": "Deskripsi / Memo penjelasan" },
+        "status": { "type": "string", "enum": ["Belum Lunas", "Sebagian", "Lunas"], "description": "Status Terkini" },
+        "payments": {
+          "type": "array",
+          "description": "Daftar riwayat pembayaran angsuran/pelunasan"
+        },
+        "createdBy": { "type": "string", "description": "UID User pembuat" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Waktu pembuatan data" }
+      },
+      "required": ["type", "name", "date", "dueDate", "totalAmount", "downPayment", "paidAmount", "remainingBalance", "status", "createdBy", "createdAt"]
     }
   },
   "firestore": {
@@ -61,6 +85,10 @@
     "invoices": {
       "schema": "Invoice",
       "description": "Koleksi Faktur."
+    },
+    "debts_receivables": {
+      "schema": "DebtReceivable",
+      "description": "Koleksi pencatatan hutang/piutang berjalan."
     }
   }
 }

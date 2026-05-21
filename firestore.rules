@@ -73,5 +73,29 @@ service cloud.firestore {
       allow update: if isSignedIn() && isOwner(existing()) && isValidInvoice(incoming());
       allow delete: if isSignedIn() && isOwner(existing());
     }
+
+    // --- Debts & Receivables ---
+    function isValidDebtReceivable(data) {
+      return data.type in ['Hutang', 'Piutang'] &&
+             data.name is string && data.name.size() <= 200 &&
+             (data.date is timestamp || data.date is string) &&
+             (data.dueDate is timestamp || data.dueDate is string) &&
+             data.totalAmount is number && data.totalAmount >= 0 &&
+             data.downPayment is number && data.downPayment >= 0 &&
+             data.paidAmount is number && data.paidAmount >= 0 &&
+             data.remainingBalance is number && data.remainingBalance >= 0 &&
+             data.status in ['Belum Lunas', 'Sebagian', 'Lunas'] &&
+             data.payments is list &&
+             data.createdBy == request.auth.uid &&
+             (data.createdAt is timestamp || data.createdAt is string) &&
+             (!('remarks' in data) || (data.remarks is string && data.remarks.size() <= 1000));
+    }
+
+    match /debts_receivables/{debtId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidDebtReceivable(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidDebtReceivable(incoming());
+      allow delete: if isSignedIn() && isOwner(existing());
+    }
   }
 }

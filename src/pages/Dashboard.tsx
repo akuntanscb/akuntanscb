@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
+import { Link } from 'react-router-dom';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -7,14 +8,19 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   HandCoins,
-  BadgeCent
+  BadgeCent,
+  Users,
+  Clock,
+  ArrowRight
 } from 'lucide-react';
 import { formatRupiah, cn } from '../lib/utils';
 import { getFinancialReports } from '../services/reportService';
 import { initializeCOA } from '../services/accountService';
+import { getDebts } from '../services/debtService';
 
 export default function Dashboard() {
   const [data, setData] = useState<any>(null);
+  const [debts, setDebts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -22,6 +28,14 @@ export default function Dashboard() {
       await initializeCOA(); // Ensure COA exists
       const reports = await getFinancialReports();
       setData(reports);
+      
+      try {
+        const debtList = await getDebts();
+        setDebts(debtList);
+      } catch (err) {
+        console.error("Gagal mendapatkan hutang piutang di dashboard", err);
+      }
+      
       setLoading(false);
     };
     fetchData();
@@ -60,6 +74,24 @@ export default function Dashboard() {
       accent: true
     },
   ];
+
+  const remainingPiutang = debts
+    .filter(d => d.type === 'Piutang')
+    .reduce((sum, d) => sum + d.remainingBalance, 0);
+
+  const remainingHutang = debts
+    .filter(d => d.type === 'Hutang')
+    .reduce((sum, d) => sum + d.remainingBalance, 0);
+
+  const overdueCount = debts.filter(d => {
+    if (d.status === 'Lunas') return false;
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    // Handle potential Timestamp or standard Date object safely
+    const due = d.dueDate?.toDate ? d.dueDate.toDate() : new Date(d.dueDate);
+    due.setHours(0,0,0,0);
+    return today.getTime() > due.getTime();
+  }).length;
 
   return (
     <div className="space-y-10">
@@ -155,6 +187,62 @@ export default function Dashboard() {
           <button className="w-full py-4 bg-white text-natural-primary rounded-2xl text-[10px] font-bold uppercase tracking-widest shadow-inner mt-8 hover:bg-natural-bg transition-colors">
             Cetak Neraca Lengkap
           </button>
+        </div>
+      </div>
+
+      {/* Monitoring Hutang & Piutang Dashboard Section */}
+      <div className="bg-white rounded-3xl border border-natural-border shadow-sm p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div>
+            <h4 className="font-serif italic text-lg text-natural-primary flex items-center gap-2">
+              <Users className="w-5 h-5 text-natural-primary" /> Monitoring Hutang & Piutang Berjalan
+            </h4>
+            <p className="text-[10px] text-gray-400 uppercase tracking-widest mt-1">Uang muka, umur hutang, dan sisa kewajiban</p>
+          </div>
+          <Link 
+            to="/hutang-piutang"
+            className="flex items-center gap-1.5 text-[11px] font-bold text-natural-primary hover:opacity-85 uppercase tracking-wider bg-natural-primary/5 px-4 py-2 rounded-xl transition-all"
+          >
+            Sistem Kontrol Lengkap <ArrowRight className="w-3.5 h-3.5" />
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
+          {/* Piutang card */}
+          <div className="bg-emerald-50/30 rounded-2xl p-4 border border-emerald-100">
+            <p className="text-[10px] uppercase text-emerald-800 font-bold tracking-wider">Sisa Piutang Aktif</p>
+            <p className="text-xl font-serif text-emerald-950 font-bold mt-1">{formatRupiah(remainingPiutang)}</p>
+            <div className="mt-2 text-[10px] text-gray-500 font-sans">
+              Dari total {debts.filter(d => d.type === 'Piutang').length} transaksi piutang donatur/santri
+            </div>
+          </div>
+
+          {/* Hutang card */}
+          <div className="bg-amber-50/30 rounded-2xl p-4 border border-amber-100">
+            <p className="text-[10px] uppercase text-amber-800 font-bold tracking-wider">Sisa Hutang Kewajiban</p>
+            <p className="text-xl font-serif text-amber-950 font-bold mt-1">{formatRupiah(remainingHutang)}</p>
+            <div className="mt-2 text-[10px] text-gray-500 font-sans">
+              Dari total {debts.filter(d => d.type === 'Hutang').length} transaksi hutang vendor/operasional
+            </div>
+          </div>
+
+          {/* Overdue alert card */}
+          <div className={cn(
+            "rounded-2xl p-4 border transition-colors",
+            overdueCount > 0 
+              ? "bg-rose-50 border-rose-200 text-rose-800" 
+              : "bg-slate-50 border-natural-border text-slate-800"
+          )}>
+            <p className="text-[10px] uppercase font-bold tracking-wider">Peringatan Jatuh Tempo</p>
+            <p className="text-xl font-serif font-bold mt-1">
+              {overdueCount > 0 ? `${overdueCount} Transaksi` : 'Seluruhnya Aman (0)'}
+            </p>
+            <div className="mt-2 text-[10px] font-sans">
+              {overdueCount > 0 
+                ? 'Segera lakukan monitoring umur piutang/hutang!' 
+                : 'Seluruh tagihan & kewajiban berjalan lancar.'}
+            </div>
+          </div>
         </div>
       </div>
     </div>
