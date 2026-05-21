@@ -261,7 +261,7 @@ export default function Journal() {
                         >
                           <option value="">-- Hubungkan Nomor Referensi Uang Muka --</option>
                           {debts
-                            .filter((d) => d.isUangMuka && d.status !== 'Lunas')
+                            .filter((d) => d.isUangMuka && (d.status !== 'Lunas' || d.dpRefNumber === selectedDpRef))
                             .map((d) => (
                               <option key={d.id} value={d.dpRefNumber}>
                                 {d.dpRefNumber} - {d.picName || 'Tanpa PIC'} (Sisa: {formatRupiah(d.remainingBalance)})

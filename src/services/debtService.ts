@@ -387,6 +387,38 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       await deleteDoc(docObj.ref);
     }
 
+    // 2.5 Also remove any payments synced from this journal entry inside other items to prevent stale values during edits
+    const qPayments = query(collection(db, COLLECTION_PATH));
+    const snapPayments = await getDocs(qPayments);
+    for (const docObj of snapPayments.docs) {
+      const data = docObj.data() as DebtReceivable;
+      const payments = data.payments || [];
+      const hasSyncedPayment = payments.some((p: any) => p.journalId === journalId);
+      
+      if (hasSyncedPayment) {
+        const filteredPayments = payments.filter((p: any) => p.journalId !== journalId);
+        const newPaidAmount = filteredPayments.reduce((sum, p) => sum + p.amount, 0);
+        const isUM = !!data.isUangMuka;
+        const newRemaining = isUM
+          ? data.totalAmount - newPaidAmount
+          : data.totalAmount - (data.downPayment || 0) - newPaidAmount;
+        
+        let newStatus: 'Belum Lunas' | 'Lunas' | 'Sebagian' = 'Sebagian';
+        if (newRemaining <= 0) {
+          newStatus = 'Lunas';
+        } else if (newPaidAmount === 0 && (data.downPayment || 0) === 0) {
+          newStatus = 'Belum Lunas';
+        }
+        
+        await updateDoc(docObj.ref, {
+          payments: filteredPayments,
+          paidAmount: newPaidAmount,
+          remainingBalance: Math.max(0, newRemaining),
+          status: newStatus
+        });
+      }
+    }
+
     // 3. Analyze journal lines
     const lines = journalEntry.lines || [];
     
