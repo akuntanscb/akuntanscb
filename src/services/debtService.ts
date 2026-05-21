@@ -528,29 +528,44 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       // If it's paying off/clearing:
       // - Credit to a Piutang account (receiving money for Piutang / collected receivable)
       else if (isPiutangAccount && line.credit > 0) {
-        const qPiutang = query(
-          collection(db, COLLECTION_PATH), 
-          where('type', '==', 'Piutang'), 
-          where('status', '!=', 'Lunas')
-        );
-        const activePiutangs = await getDocs(qPiutang);
-        
         let matchedDebt: any = null;
-        const journalDescLower = description.toLowerCase();
-        
-        for (const docObj of activePiutangs.docs) {
-          const debtData = docObj.data();
-          if (journalDescLower.includes(debtData.name.toLowerCase()) || debtData.name.toLowerCase().includes(journalDescLower)) {
-            matchedDebt = { id: docObj.id, ...debtData };
-            break;
+
+        // Prioritize matching explicitly by dpRefNumber if provided
+        const linkedRefNum = journalEntry.dpRefNumber;
+        if (linkedRefNum) {
+          const qRef = query(
+            collection(db, COLLECTION_PATH),
+            where('dpRefNumber', '==', linkedRefNum)
+          );
+          const refSnap = await getDocs(qRef);
+          if (!refSnap.empty) {
+            matchedDebt = { id: refSnap.docs[0].id, ...refSnap.docs[0].data() };
           }
         }
 
-        if (!matchedDebt && !activePiutangs.empty) {
-          const sorted = activePiutangs.docs
-            .map(d => ({ id: d.id, ...d.data() } as any))
-            .sort((a, b) => a.date.seconds - b.date.seconds);
-          matchedDebt = sorted[0];
+        if (!matchedDebt) {
+          const qPiutang = query(
+            collection(db, COLLECTION_PATH), 
+            where('type', '==', 'Piutang'), 
+            where('status', '!=', 'Lunas')
+          );
+          const activePiutangs = await getDocs(qPiutang);
+          const journalDescLower = description.toLowerCase();
+          
+          for (const docObj of activePiutangs.docs) {
+            const debtData = docObj.data();
+            if (journalDescLower.includes(debtData.name.toLowerCase()) || debtData.name.toLowerCase().includes(journalDescLower)) {
+              matchedDebt = { id: docObj.id, ...debtData };
+              break;
+            }
+          }
+
+          if (!matchedDebt && !activePiutangs.empty) {
+            const sorted = activePiutangs.docs
+              .map(d => ({ id: d.id, ...d.data() } as any))
+              .sort((a, b) => a.date.seconds - b.date.seconds);
+            matchedDebt = sorted[0];
+          }
         }
 
         if (matchedDebt) {
@@ -563,12 +578,16 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
               id: `jpay-${journalId}`,
               date: Timestamp.fromDate(date),
               amount: line.credit,
-              notes: `Angsuran via Jurnal (Ref: ${reference} - ${description})`,
+              notes: `Penyelesaian via Jurnal (Ref: ${reference} - ${description})`,
               journalId
             };
             const updatedPayments = [...payments, newPayment];
             const newPaidAmount = (matchedDebt.paidAmount || 0) + line.credit;
-            const newRemaining = matchedDebt.totalAmount - matchedDebt.downPayment - newPaidAmount;
+            
+            const isUM = !!matchedDebt.isUangMuka;
+            const newRemaining = isUM
+              ? matchedDebt.totalAmount - newPaidAmount
+              : matchedDebt.totalAmount - (matchedDebt.downPayment || 0) - newPaidAmount;
             
             let newStatus: 'Belum Lunas' | 'Lunas' | 'Sebagian' = 'Sebagian';
             if (newRemaining <= 0) {

@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Save, AlertCircle, Edit2, X } from 'lucide-react';
 import { getAccounts } from '../services/accountService';
 import { createJournalEntry, getJournalEntries, updateJournalEntry, deleteJournalEntry } from '../services/journalService';
-import { Account, JournalLine, JournalEntry } from '../types';
+import { getDebts } from '../services/debtService';
+import { Account, JournalLine, JournalEntry, DebtReceivable } from '../types';
 import { auth } from '../lib/firebase';
 import { formatRupiah, cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -11,6 +12,7 @@ import { format } from 'date-fns';
 export default function Journal() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [debts, setDebts] = useState<DebtReceivable[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
@@ -19,6 +21,7 @@ export default function Journal() {
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [picName, setPicName] = useState('');
+  const [selectedDpRef, setSelectedDpRef] = useState('');
   const [lines, setLines] = useState<JournalLine[]>([
     { accountId: '', accountName: '', debit: 0, credit: 0 },
     { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -40,9 +43,10 @@ export default function Journal() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [accs, jurs] = await Promise.all([getAccounts(), getJournalEntries()]);
+    const [accs, jurs, debtsList] = await Promise.all([getAccounts(), getJournalEntries(), getDebts()]);
     setAccounts(accs);
     setEntries(jurs);
+    setDebts(debtsList);
     setLoading(false);
   };
 
@@ -73,6 +77,7 @@ export default function Journal() {
     setDescription('');
     setReference('');
     setPicName('');
+    setSelectedDpRef('');
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setLines([
       { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -87,6 +92,7 @@ export default function Journal() {
     setDescription(entry.description);
     setReference(entry.reference);
     setPicName((entry as any).picName || '');
+    setSelectedDpRef((entry as any).dpRefNumber || '');
     setDate(format(entry.date.toDate(), 'yyyy-MM-dd'));
     setLines(entry.lines.map(line => ({
       accountId: line.accountId,
@@ -138,10 +144,11 @@ export default function Journal() {
           new Date(date),
           editingEntry.createdBy,
           editingEntry.createdAt,
-          picName
+          picName,
+          selectedDpRef
         );
       } else {
-        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName);
+        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef);
       }
       
       handleCancelForm();
@@ -154,6 +161,34 @@ export default function Journal() {
   const totalDebit = lines.reduce((sum, l) => sum + l.debit, 0);
   const totalCredit = lines.reduce((sum, l) => sum + l.credit, 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
+
+  const hasCreditUangMuka = lines.some((line) => {
+    if (!line.accountId || !line.credit || line.credit <= 0) return false;
+    const acc = accounts.find((a) => a.id === line.accountId);
+    if (!acc) return false;
+    const name = acc.name.toLowerCase();
+    return name.includes('uang muka') || name.includes('panjar') || name.includes('dp');
+  });
+
+  // Automatically reset selectedDpRef if hasCreditUangMuka becomes false
+  useEffect(() => {
+    if (!hasCreditUangMuka) {
+      setSelectedDpRef('');
+    }
+  }, [hasCreditUangMuka]);
+
+  const handleSelectDpRef = (refNum: string) => {
+    setSelectedDpRef(refNum);
+    if (!refNum) return;
+    const um = debts.find((d) => d.dpRefNumber === refNum);
+    if (um) {
+      if (um.picName) {
+        setPicName(um.picName);
+      }
+      const originalRemarks = um.remarks || 'Uang Muka';
+      setDescription(`Laporan Pertanggungjawaban ${originalRemarks} [Ref: ${um.dpRefNumber}]`);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -202,6 +237,47 @@ export default function Journal() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-6">
+            <AnimatePresence>
+              {hasCreditUangMuka && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="bg-emerald-50/70 border border-emerald-150 p-4 rounded-xl space-y-2 mb-2">
+                    <div className="text-xs font-bold text-emerald-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Pilih Uang Muka yang Diselesaikan</span>
+                      <span className="bg-emerald-100 text-emerald-700 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                        Cash Basis Sync
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <select
+                          value={selectedDpRef}
+                          onChange={(e) => handleSelectDpRef(e.target.value)}
+                          className="w-full px-4 py-2 border border-emerald-250 bg-white rounded-lg text-sm text-emerald-950 font-medium outline-none focus:ring-2 focus:ring-emerald-500 transition-all cursor-pointer"
+                        >
+                          <option value="">-- Hubungkan Nomor Referensi Uang Muka --</option>
+                          {debts
+                            .filter((d) => d.isUangMuka && d.status !== 'Lunas')
+                            .map((d) => (
+                              <option key={d.id} value={d.dpRefNumber}>
+                                {d.dpRefNumber} - {d.picName || 'Tanpa PIC'} (Sisa: {formatRupiah(d.remainingBalance)})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="text-xs text-emerald-700 leading-relaxed font-sans flex items-center pr-2">
+                        Memilih referensi akan otomatis mengisi nama Penanggung Jawab (PIC) dan menyusun keterangan jurnal penyelesaian laporan uang muka secara otomatis.
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Tanggal</label>

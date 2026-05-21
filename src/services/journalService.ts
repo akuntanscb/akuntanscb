@@ -10,7 +10,8 @@ export const createJournalEntry = async (
   lines: JournalLine[],
   userId: string,
   date: Date = new Date(),
-  picName?: string
+  picName?: string,
+  dpRefNumber?: string
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
@@ -29,7 +30,8 @@ export const createJournalEntry = async (
       lines,
       createdBy: userId,
       createdAt: createdAtTime,
-      picName: picName || ''
+      picName: picName || '',
+      dpRefNumber: dpRefNumber || ''
     });
 
     const journalId = docRef.id;
@@ -42,7 +44,8 @@ export const createJournalEntry = async (
         lines,
         createdBy: userId,
         createdAt: createdAtTime,
-        picName: picName || ''
+        picName: picName || '',
+        dpRefNumber: dpRefNumber || ''
       });
     } catch (syncErr) {
       console.error("Gagal melakukan sinkronisasi kontrol hutang piutang:", syncErr);
@@ -96,7 +99,8 @@ export const updateJournalEntry = async (
   date: Date,
   createdBy: string,
   createdAt: any,
-  picName?: string
+  picName?: string,
+  dpRefNumber?: string
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum+ line.credit, 0);
@@ -115,7 +119,8 @@ export const updateJournalEntry = async (
       lines,
       createdBy,
       createdAt,
-      picName: picName || ''
+      picName: picName || '',
+      dpRefNumber: dpRefNumber || ''
     });
 
     try {
@@ -127,7 +132,8 @@ export const updateJournalEntry = async (
         lines,
         createdBy,
         createdAt,
-        picName: picName || ''
+        picName: picName || '',
+        dpRefNumber: dpRefNumber || ''
       });
     } catch (syncErr) {
       console.error("Gagal memperbarui sinkronisasi kontrol hutang piutang:", syncErr);
