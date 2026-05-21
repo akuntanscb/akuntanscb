@@ -624,6 +624,11 @@ export default function HutangPiutang() {
                           )}>
                             {item.type}
                           </span>
+                          {item.journalId && (
+                            <span className="bg-blue-50 border border-blue-200 text-blue-600 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
+                              Synced Jurnal
+                            </span>
+                          )}
                           {isPastDue && (
                             <span className="bg-rose-50 border border-rose-200 text-rose-600 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
                               <AlertCircle className="w-3 h-3" /> Jatuh Tempo
@@ -775,6 +780,18 @@ export default function HutangPiutang() {
                   <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-xl flex items-center gap-2">
                     <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
                     <span>{formError}</span>
+                  </div>
+                )}
+
+                {selectedDebt?.journalId && (
+                  <div className="p-3 bg-blue-50 border border-blue-150 text-blue-800 text-xs rounded-xl flex items-start gap-2">
+                    <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-bold">Transaksi Otomatis (Terhubung)</p>
+                      <p className="text-[10px] text-blue-600 leading-relaxed mt-0.5">
+                        Data ini terintegrasi secara otomatis dari entri Jurnal Umum. Jika mengubah nilai nominal, kami sangat menyarankan mengupdate-nya langsung melalui tabel Jurnal Umum untuk menjaga konsistensi buku besar.
+                      </p>
+                    </div>
                   </div>
                 )}
 

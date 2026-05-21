@@ -2,6 +2,7 @@ import { addDoc, collection, doc, getDocs, orderBy, query, Timestamp, where, upd
 import { db } from '../lib/firebase';
 import { JournalEntry, JournalLine } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
+import { syncJournalToDebtControl, deleteSyncedDebtControl } from './debtService';
 
 export const createJournalEntry = async (
   description: string,
@@ -19,16 +20,32 @@ export const createJournalEntry = async (
 
   const path = 'journal_entries';
   try {
+    const createdAtTime = Timestamp.now();
     const docRef = await addDoc(collection(db, path), {
       date: Timestamp.fromDate(date),
       description,
       reference,
       lines,
       createdBy: userId,
-      createdAt: Timestamp.now()
+      createdAt: createdAtTime
     });
 
-    return docRef.id;
+    const journalId = docRef.id;
+    try {
+      await syncJournalToDebtControl({
+        id: journalId,
+        date: Timestamp.fromDate(date),
+        description,
+        reference,
+        lines,
+        createdBy: userId,
+        createdAt: createdAtTime
+      });
+    } catch (syncErr) {
+      console.error("Gagal melakukan sinkronisasi kontrol hutang piutang:", syncErr);
+    }
+
+    return journalId;
   } catch (error) {
     handleFirestoreError(error, OperationType.CREATE, path);
     throw error;
@@ -95,6 +112,20 @@ export const updateJournalEntry = async (
       createdBy,
       createdAt
     });
+
+    try {
+      await syncJournalToDebtControl({
+        id,
+        date: Timestamp.fromDate(date),
+        description,
+        reference,
+        lines,
+        createdBy,
+        createdAt
+      });
+    } catch (syncErr) {
+      console.error("Gagal memperbarui sinkronisasi kontrol hutang piutang:", syncErr);
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
     throw error;
@@ -106,6 +137,12 @@ export const deleteJournalEntry = async (id: string) => {
   try {
     const docRef = doc(db, 'journal_entries', id);
     await deleteDoc(docRef);
+
+    try {
+      await deleteSyncedDebtControl(id);
+    } catch (syncErr) {
+      console.error("Gagal menghapus sinkronisasi kontrol hutang piutang:", syncErr);
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
     throw error;
