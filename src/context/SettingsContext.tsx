@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 
 export interface SystemSettings {
   currency: 'IDR' | 'USD' | 'EUR' | 'SGD' | 'GBP' | 'JPY';
@@ -177,6 +177,53 @@ export const translations = {
   }
 };
 
+export enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+export interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+    tenantId?: string | null;
+    providerInfo?: {
+      providerId?: string | null;
+      email?: string | null;
+    }[];
+  }
+}
+
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData?.map(provider => ({
+        providerId: provider.providerId,
+        email: provider.email,
+      })) || []
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 interface SettingsContextType {
   settings: SystemSettings;
   t: (key: keyof typeof translations.id) => string;
@@ -212,8 +259,16 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           setSettings(merged);
           localStorage.setItem('system_settings', JSON.stringify(merged));
         }
-      } catch (e) {
-        console.warn('Could not fetch settings from Firestore, using local fallback:', e);
+      } catch (e: any) {
+        if (e && e.message && (e.message.includes('permission') || e.code === 'permission-denied')) {
+          try {
+            handleFirestoreError(e, OperationType.GET, 'system_settings/global');
+          } catch (thrownErr) {
+            console.error('Firestore initialization error:', thrownErr);
+          }
+        } else {
+          console.warn('Could not fetch settings from Firestore, using local fallback:', e);
+        }
       } finally {
         setIsLoading(false);
       }
@@ -278,8 +333,8 @@ export const SettingsProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       const docRef = doc(db, 'system_settings', 'global');
       await setDoc(docRef, updated, { merge: true });
-    } catch (e) {
-      console.error('Failed to sync setting to Firestore:', e);
+    } catch (e: any) {
+      handleFirestoreError(e, OperationType.WRITE, 'system_settings/global');
     }
   };
 

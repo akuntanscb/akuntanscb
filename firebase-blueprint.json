@@ -75,6 +75,25 @@
         "journalId": { "type": "string", "description": "ID Jurnal Umum terkait untuk sinkronisasi" }
       },
       "required": ["type", "name", "date", "dueDate", "totalAmount", "downPayment", "paidAmount", "remainingBalance", "status", "createdBy", "createdAt"]
+    },
+    "SystemSetting": {
+      "title": "Pengaturan Sistem",
+      "description": "Pengaturan administratif global untuk branding, mata uang, bahasa, dan visual aplikasi.",
+      "type": "object",
+      "properties": {
+        "currency": { "type": "string", "enum": ["IDR", "USD", "EUR", "SGD", "GBP", "JPY"], "description": "Mata uang dasar" },
+        "currencySymbol": { "type": "string", "description": "Simbol mata uang" },
+        "language": { "type": "string", "enum": ["id", "en", "ar"], "description": "Bahasa operasional" },
+        "fontFamily": { "type": "string", "enum": ["Inter", "Outfit", "Space Grotesk", "Playfair Display", "JetBrains Mono"], "description": "Jenis tipografi sistem" },
+        "fontSize": { "type": "string", "enum": ["sm", "base", "lg"], "description": "Ukuran huruf sistem" },
+        "systemName": { "type": "string", "description": "Nama sistem/institusi" },
+        "systemSubName": { "type": "string", "description": "Slogan/Keterangan sistem" },
+        "logoType": { "type": "string", "enum": ["school", "finance", "shield", "custom"], "description": "Tipe tampilan logo" },
+        "customLogoUrl": { "type": "string", "description": "URL logo kustom" },
+        "colorTheme": { "type": "string", "enum": ["original", "emerald", "indigo", "slate", "rose", "violet"], "description": "Skema warna utama" },
+        "invoiceTemplate": { "type": "string", "enum": ["classic", "modern", "minimalist"], "description": "Desain templat faktur" }
+      },
+      "required": ["currency", "language", "fontFamily", "fontSize", "systemName", "systemSubName", "logoType", "colorTheme", "invoiceTemplate"]
     }
   },
   "firestore": {
@@ -93,6 +112,10 @@
     "debts_receivables": {
       "schema": "DebtReceivable",
       "description": "Koleksi pencatatan hutang/piutang berjalan."
+    },
+    "system_settings": {
+      "schema": "SystemSetting",
+      "description": "Koleksi konfigurasi administratif global."
     }
   }
 }

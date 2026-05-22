@@ -101,5 +101,27 @@ service cloud.firestore {
       allow update: if isSignedIn() && isOwner(existing()) && isValidDebtReceivable(incoming());
       allow delete: if isSignedIn() && isOwner(existing());
     }
+
+    // --- System Settings ---
+    function isValidSystemSetting(data) {
+      return data.currency in ['IDR', 'USD', 'EUR', 'SGD', 'GBP', 'JPY'] &&
+             data.language in ['id', 'en', 'ar'] &&
+             data.fontFamily in ['Inter', 'Outfit', 'Space Grotesk', 'Playfair Display', 'JetBrains Mono'] &&
+             data.fontSize in ['sm', 'base', 'lg'] &&
+             data.systemName is string && data.systemName.size() <= 200 &&
+             data.systemSubName is string && data.systemSubName.size() <= 400 &&
+             data.logoType in ['school', 'finance', 'shield', 'custom'] &&
+             data.colorTheme in ['original', 'emerald', 'indigo', 'slate', 'rose', 'violet'] &&
+             data.invoiceTemplate in ['classic', 'modern', 'minimalist'] &&
+             (!('customLogoUrl' in data) || (data.customLogoUrl is string && data.customLogoUrl.size() <= 2000)) &&
+             (!('currencySymbol' in data) || (data.currencySymbol is string && data.currencySymbol.size() <= 8));
+    }
+
+    match /system_settings/{settingId} {
+      allow read: if true;
+      allow create: if isSignedIn() && isValidId(settingId) && isValidSystemSetting(incoming());
+      allow update: if isSignedIn() && isValidId(settingId) && isValidSystemSetting(incoming());
+      allow delete: if false;
+    }
   }
 }
