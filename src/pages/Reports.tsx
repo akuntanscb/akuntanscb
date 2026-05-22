@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Printer, Download, Filter, FileBarChart, Settings2, Sliders, ChevronUp, ChevronDown, Eye, EyeOff, X, Save, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Printer, Download, Filter, FileBarChart, Settings2, Sliders, ChevronUp, ChevronDown, Eye, EyeOff, X, Save, CheckCircle2, AlertCircle, Info } from 'lucide-react';
 import { getFinancialReports } from '../services/reportService';
 import { getAccounts, updateAccount } from '../services/accountService';
 import { Account, AccountCategory } from '../types';
@@ -9,7 +9,7 @@ import { formatRupiah, cn } from '../lib/utils';
 export default function Reports() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'neraca' | 'aktivitas'>('neraca');
+  const [activeTab, setActiveTab] = useState<'neraca' | 'aktivitas' | 'arusKas' | 'calk'>('neraca');
 
   // Layout Configuration states
   const [isLayoutEditorOpen, setIsLayoutEditorOpen] = useState(false);
@@ -19,8 +19,20 @@ export default function Reports() {
   const [layoutSuccessMsg, setLayoutSuccessMsg] = useState('');
   const [layoutErrorMsg, setLayoutErrorMsg] = useState('');
 
+  // CALK Dynamic States
+  const [calkKepalaSekolah, setCalkKepalaSekolah] = useState('');
+  const [calkBendahara, setCalkBendahara] = useState('');
+  const [calkCatatanTambahan, setCalkCatatanTambahan] = useState('');
+  const [calkSuccessMsg, setCalkSuccessMsg] = useState('');
+
   useEffect(() => {
     fetchData();
+    // Load CALK local persistence values
+    setCalkKepalaSekolah(localStorage.getItem('calk_kepsek') || 'H. Kamaludin, M.Pd.');
+    setCalkBendahara(localStorage.getItem('calk_bendahara') || 'Siti Aminah, S.E.');
+    setCalkCatatanTambahan(localStorage.getItem('calk_catatan') || 
+      `1. Sekolah Cendekia Baznas (SCB) mempersiapkan laporan keuangan sesuai dengan PSAK 45 / ISAK 35 tentang Pelaporan Keuangan Entitas Nir Laba.\n2. Sumber pendanaan utama sekolah bersumber dari penyaluran Dana ZIS (Zakat, Infak, Sedekah) yang dikelola oleh BAZNAS Pusat.\n3. Saldo Aset Neto Sekolah di akhir tahun berjalan menunjukkan rasio likuiditas yang sehat guna mendukung beasiswa penuh bagi seluruh santri dhuafa.`
+    );
   }, []);
 
   const fetchData = async () => {
@@ -28,6 +40,113 @@ export default function Reports() {
     const reports = await getFinancialReports();
     setData(reports);
     setLoading(false);
+  };
+
+  const handleSaveCalk = () => {
+    localStorage.setItem('calk_kepsek', calkKepalaSekolah);
+    localStorage.setItem('calk_bendahara', calkBendahara);
+    localStorage.setItem('calk_catatan', calkCatatanTambahan);
+    setCalkSuccessMsg('Catatan atas Laporan Keuangan (CALK) berhasil disimpan!');
+    setTimeout(() => setCalkSuccessMsg(''), 3000);
+  };
+
+  const formatAccounting = (val: number) => {
+    if (val < 0) {
+      return `(${formatRupiah(Math.abs(val))})`;
+    }
+    return formatRupiah(val);
+  };
+
+  const handleDownloadActiveReport = () => {
+    if (!data) return;
+    let title = '';
+    let text = '=======================================\n';
+    text += 'SEKOLAH CENDEKIA BAZNAS - LAPORAN KEUANGAN\n';
+    text += `Tanggal: ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}\n`;
+    text += '=======================================\n\n';
+
+    if (activeTab === 'neraca') {
+      title = 'Laporan_Neraca';
+      text += 'LAPORAN POSISI KEUANGAN (NERACA)\n\n';
+      text += '*** ASET ***\n';
+      data.neraca.aset.forEach((a: any) => {
+        text += `${a.code} - ${a.name}: ${formatRupiah(a.balance)}\n`;
+      });
+      text += `TOTAL ASET: ${formatRupiah(data.neraca.totalAset)}\n\n`;
+      text += '*** LIABILITAS ***\n';
+      data.neraca.liabilitas.forEach((l: any) => {
+        text += `${l.code} - ${l.name}: ${formatRupiah(l.balance)}\n`;
+      });
+      text += `TOTAL LIABILITAS: ${formatRupiah(data.neraca.totalLiabilitas)}\n\n`;
+      text += '*** EKUITAS ***\n';
+      data.neraca.ekuitas.forEach((e: any) => {
+        text += `${e.code} - ${e.name}: ${formatRupiah(e.balance)}\n`;
+      });
+      text += `Surplus/Defisit Berjalan: ${formatRupiah(data.neraca.surplusDefisit)}\n`;
+      text += `TOTAL EKUITAS: ${formatRupiah(data.neraca.totalEkuitas + data.neraca.surplusDefisit)}\n\n`;
+      text += `TOTAL LIABILITAS & EKUITAS: ${formatRupiah(data.neraca.totalLiabilitas + data.neraca.totalEkuitas + data.neraca.surplusDefisit)}\n`;
+    } else if (activeTab === 'aktivitas') {
+      title = 'Laporan_Aktivitas';
+      text += 'LAPORAN AKTIVITAS\n\n';
+      text += '*** PENDAPATAN ***\n';
+      data.aktivitas.pendapatan.forEach((p: any) => {
+        text += `${p.name}: ${formatRupiah(p.balance)}\n`;
+      });
+      text += `TOTAL PENDAPATAN: ${formatRupiah(data.aktivitas.totalPendapatan)}\n\n`;
+      text += '*** BEBAN ***\n';
+      data.aktivitas.beban.forEach((b: any) => {
+        text += `${b.name}: ${formatRupiah(b.balance)}\n`;
+      });
+      text += `TOTAL BEBAN: ${formatRupiah(data.aktivitas.totalBeban)}\n\n`;
+      text += `SURPLUS/DEFISIT AKTIVITAS: ${formatRupiah(data.aktivitas.surplusDefisit)}\n`;
+    } else if (activeTab === 'arusKas') {
+      title = 'Laporan_Arus_Kas';
+      text += 'LAPORAN ARUS KAS (DIRECT METHOD)\n\n';
+      text += '1. ARUS KAS AKTIVITAS OPERASIONAL\n';
+      text += `Penerimaan Siswa SPP: ${formatRupiah(data.arusKas.details.oprPenerimaanSiswa)}\n`;
+      text += `Penerimaan Operasional Lainnya: ${formatRupiah(data.arusKas.details.oprPenerimaanLain)}\n`;
+      text += `Total Penerimaan Opr: ${formatRupiah(data.arusKas.details.totalOprInflow)}\n`;
+      text += `Pengeluaran Gaji & Beban Opr: ${formatRupiah(data.arusKas.details.oprPengeluaranBeban)}\n`;
+      text += `Pengeluaran Operasional Lainnya: ${formatRupiah(data.arusKas.details.oprPengeluaranLain)}\n`;
+      text += `Total Pengeluaran Opr: ${formatRupiah(data.arusKas.details.totalOprOutflow)}\n`;
+      text += `Arus Kas Bersih Operasional: ${formatAccounting(data.arusKas.details.netOprCashFlow)}\n\n`;
+      
+      text += '2. ARUS KAS AKTIVITAS INVESTASI\n';
+      text += `Penerimaan Divestasi/Aset: ${formatRupiah(data.arusKas.details.invPenerimaanAset)}\n`;
+      text += `Pengeluaran Pembelian Aset/Renovasi: ${formatRupiah(data.arusKas.details.invPengeluaranAset)}\n`;
+      text += `Arus Kas Bersih Investasi: ${formatAccounting(data.arusKas.details.netInvCashFlow)}\n\n`;
+
+      text += '3. ARUS KAS AKTIVITAS PENDANAAN\n';
+      text += `Penerimaan Pinjaman/Lainnya: ${formatRupiah(data.arusKas.details.penPenerimaanHutang)}\n`;
+      text += `Pengeluaran Pelunasan Pinjaman: ${formatRupiah(data.arusKas.details.penPengeluaranHutang)}\n`;
+      text += `Arus Kas Bersih Pendanaan: ${formatAccounting(data.arusKas.details.netPenCashFlow)}\n\n`;
+
+      text += `KENAIKAN/(PENURUNAN) BERSIH KAS: ${formatAccounting(data.arusKas.details.netCashFlowChange)}\n`;
+      text += `Saldo Awal Kas: ${formatRupiah(data.arusKas.details.totalSawalKas)}\n`;
+      text += `Saldo Akhir Kas: ${formatRupiah(data.arusKas.details.totalSakhirKas)}\n`;
+    } else {
+      title = 'Laporan_CALK';
+      text += 'CATATAN ATAS LAPORAN KEUANGAN (CALK)\n\n';
+      text += 'BAB I. GAMBARAN UMUM ENTITAS\n';
+      text += 'Sekolah Cendekia Baznas (SCB) beroperasi di Cibungbulang, Bogor.\n';
+      text += `Kepala Sekolah: ${calkKepalaSekolah}\n`;
+      text += `Bendahara: ${calkBendahara}\n\n`;
+      text += 'BAB II. KEBIJAKAN AKUNTANSI SIGNIFIKAN\nKombinasi basis kas & akrual, mata uang rupiah.\n\n';
+      text += 'BAB III. RINCIAN POS-POS LAPORAN KEUANGAN\n';
+      text += `Total Aset: ${formatRupiah(data.neraca.totalAset)}\n`;
+      text += `Surplus/Defisit Berjalan: ${formatRupiah(data.aktivitas.surplusDefisit)}\n\n`;
+      text += 'BAB IV. KETERANGAN & CATATAN KHUSUS AKTIVITAS\n';
+      text += calkCatatanTambahan + '\n';
+    }
+
+    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${title}_${new Date().toISOString().slice(0, 10)}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const openLayoutEditor = async () => {
@@ -150,7 +269,7 @@ export default function Reports() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center">
+      <div className="flex justify-between items-center bg-white/40 p-1 rounded-2xl">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Laporan Keuangan</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Laporan otomatis berbasis posting jurnal</p>
@@ -158,26 +277,34 @@ export default function Reports() {
         <div className="flex gap-3">
           <button
             onClick={openLayoutEditor}
-            className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm"
+            className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none"
           >
             <Sliders className="w-4 h-4 text-natural-primary" />
             Atur Tata Letak
           </button>
-          <button className="p-3 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary transition-all shadow-sm text-slate-700">
+          <button 
+            onClick={() => window.print()}
+            className="p-3 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-slate-700 hover:text-indigo-600 transition-all shadow-sm cursor-pointer"
+            title="Cetak Laporan Keuangan"
+          >
             <Printer className="w-5 h-5" />
           </button>
-          <button className="p-3 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary transition-all shadow-sm text-slate-700">
+          <button 
+            onClick={handleDownloadActiveReport}
+            className="p-3 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-slate-700 hover:text-indigo-600 transition-all shadow-sm cursor-pointer"
+            title="Unduh Laporan Aktif sebagai Text"
+          >
             <Download className="w-5 h-5" />
           </button>
         </div>
       </div>
 
-      <div className="flex border-b border-natural-border">
+      <div className="flex border-b border-natural-border overflow-x-auto whitespace-nowrap scrollbar-none">
         <button 
           onClick={() => setActiveTab('neraca')}
           className={cn(
-            "px-8 py-4 font-semibold text-sm transition-all relative",
-            activeTab === 'neraca' ? "text-natural-primary" : "text-gray-400"
+            "px-6 sm:px-8 py-4 font-semibold text-xs sm:text-sm transition-all relative cursor-pointer select-none shrink-0",
+            activeTab === 'neraca' ? "text-natural-primary font-bold" : "text-gray-400 hover:text-slate-600"
           )}
         >
           Laporan Neraca
@@ -186,20 +313,46 @@ export default function Reports() {
         <button 
           onClick={() => setActiveTab('aktivitas')}
           className={cn(
-            "px-8 py-4 font-semibold text-sm transition-all relative",
-            activeTab === 'aktivitas' ? "text-natural-primary" : "text-gray-400"
+            "px-6 sm:px-8 py-4 font-semibold text-xs sm:text-sm transition-all relative cursor-pointer select-none shrink-0",
+            activeTab === 'aktivitas' ? "text-natural-primary font-bold" : "text-gray-400 hover:text-slate-600"
           )}
         >
           Laporan Aktivitas
           {activeTab === 'aktivitas' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-natural-primary" />}
         </button>
+        <button 
+          onClick={() => setActiveTab('arusKas')}
+          className={cn(
+            "px-6 sm:px-8 py-4 font-semibold text-xs sm:text-sm transition-all relative cursor-pointer select-none shrink-0",
+            activeTab === 'arusKas' ? "text-natural-primary font-bold" : "text-gray-400 hover:text-slate-600"
+          )}
+        >
+          Laporan Arus Kas
+          {activeTab === 'arusKas' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-natural-primary" />}
+        </button>
+        <button 
+          onClick={() => setActiveTab('calk')}
+          className={cn(
+            "px-6 sm:px-8 py-4 font-semibold text-xs sm:text-sm transition-all relative cursor-pointer select-none shrink-0",
+            activeTab === 'calk' ? "text-natural-primary font-bold" : "text-gray-400 hover:text-slate-600"
+          )}
+        >
+          Catatan Atas Laporan Keuangan (CALK)
+          {activeTab === 'calk' && <motion.div layoutId="tab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-natural-primary" />}
+        </button>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-natural-border shadow-sm p-12">
+      <div className="bg-white rounded-[2rem] border border-natural-border shadow-sm p-12 print:p-0 print:border-none print:shadow-none">
         <div className="text-center mb-16 space-y-2">
           <h2 className="text-2xl font-serif text-natural-primary uppercase tracking-tight">Sekolah Cendekia Baznas</h2>
           <p className="text-gray-400 uppercase tracking-[0.2em] text-xs font-bold">
-            {activeTab === 'neraca' ? 'LAPORAN POSISI KEUANGAN (NERACA)' : 'LAPORAN AKTIVITAS'}
+            {activeTab === 'neraca' 
+              ? 'LAPORAN POSISI KEUANGAN (NERACA)' 
+              : activeTab === 'aktivitas' 
+              ? 'LAPORAN AKTIVITAS' 
+              : activeTab === 'arusKas'
+              ? 'LAPORAN ARUS KAS (DIRECT METHOD)'
+              : 'CATATAN ATAS LAPORAN KEUANGAN (CALK)'}
           </p>
           <div className="w-12 h-1 bg-natural-primary/20 mx-auto rounded-full mt-4" />
           <p className="text-gray-400 text-[11px] font-medium pt-2 uppercase">Per {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
@@ -208,7 +361,7 @@ export default function Reports() {
         {activeTab === 'neraca' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             <div className="space-y-6">
-              <h3 className="font-bold text-slate-800 border-b pb-2">ASET</h3>
+              <h3 className="font-bold text-slate-800 border-b pb-2 text-left">ASET</h3>
               {data.neraca.aset.map((a: any) => (
                 <div key={a.id} className="flex justify-between text-sm">
                   <span>{a.code} - {a.name}</span>
@@ -223,7 +376,7 @@ export default function Reports() {
 
             <div className="space-y-12">
               <div className="space-y-6">
-                <h3 className="font-bold text-slate-800 border-b pb-2">LIABILITAS</h3>
+                <h3 className="font-bold text-slate-800 border-b pb-2 text-left">LIABILITAS</h3>
                 {data.neraca.liabilitas.map((l: any) => (
                   <div key={l.id} className="flex justify-between text-sm">
                     <span>{l.code} - {l.name}</span>
@@ -237,9 +390,9 @@ export default function Reports() {
               </div>
 
               <div className="space-y-6">
-                <h3 className="font-bold text-slate-800 border-b pb-2">EKUITAS (ASET NETO)</h3>
+                <h3 className="font-bold text-slate-800 border-b pb-2 text-left">EKUITAS (ASET NETO)</h3>
                 {data.neraca.ekuitas.map((e: any) => (
-                  <div key={e.id} className="flex justify-between text-sm">
+                  <div key={e.id} className="flex justify-between text-sm flex-row">
                     <span>{e.code} - {e.name}</span>
                     <span className="font-mono">{formatRupiah(e.balance)}</span>
                   </div>
@@ -260,10 +413,10 @@ export default function Reports() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === 'aktivitas' ? (
           <div className="max-w-2xl mx-auto space-y-8">
              <div className="space-y-4">
-               <h3 className="font-bold text-emerald-700 bg-emerald-50 px-4 py-2 rounded">PENDAPATAN / PENERIMAAN</h3>
+               <h3 className="font-bold text-emerald-700 bg-emerald-50 px-4 py-2 rounded text-left">PENDAPATAN / PENERIMAAN</h3>
                {data.aktivitas.pendapatan.map((p: any) => (
                  <div key={p.id} className="flex justify-between px-4 text-sm">
                    <span>{p.name}</span>
@@ -277,7 +430,7 @@ export default function Reports() {
              </div>
 
              <div className="space-y-4">
-               <h3 className="font-bold text-rose-700 bg-rose-50 px-4 py-2 rounded">BEBAN PENGELUARAN</h3>
+               <h3 className="font-bold text-rose-700 bg-rose-50 px-4 py-2 rounded text-left flex-row select-none">BEBAN PENGELUARAN</h3>
                {data.aktivitas.beban.map((b: any) => (
                  <div key={b.id} className="flex justify-between px-4 text-sm">
                    <span>{b.name}</span>
@@ -294,6 +447,331 @@ export default function Reports() {
                <span>SURPLUS (DEFISIT) AKTIVITAS</span>
                <span className="font-mono uppercase">{formatRupiah(data.aktivitas.surplusDefisit)}</span>
              </div>
+          </div>
+        ) : activeTab === 'arusKas' ? (
+          <div className="max-w-3xl mx-auto space-y-10 text-left">
+            {/* Arus Kas Operasional */}
+            <div className="space-y-4">
+              <h3 className="font-bold text-indigo-900 bg-indigo-50 px-4 py-2.5 rounded-xl text-sm flex justify-between items-center shadow-sm">
+                <span>I. ARUS KAS DARI AKTIVITAS OPERASIONAL</span>
+                <span className="font-mono">{formatAccounting(data.arusKas.details.netOprCashFlow)}</span>
+              </h3>
+              <div className="px-4 space-y-3.5 text-sm">
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Penerimaan SPP & dana bulanan santri/siswa</span>
+                  <span className="font-mono text-emerald-600 font-semibold">+{formatRupiah(data.arusKas.details.oprPenerimaanSiswa)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Penerimaan dana ZIS & hibah operasional lainnya</span>
+                  <span className="font-mono text-emerald-600 font-semibold">+{formatRupiah(data.arusKas.details.oprPenerimaanLain)}</span>
+                </div>
+                <div className="flex justify-between pl-4 font-semibold text-slate-700 border-b border-dashed pb-1.5 pt-0.5">
+                  <span>Subtotal Arus Kas Masuk Operasional</span>
+                  <span className="font-mono text-slate-800">{formatRupiah(data.arusKas.details.totalOprInflow)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Pengeluaran gaji pengajar & beban operasional sekolah</span>
+                  <span className="font-mono text-rose-600">-{formatRupiah(data.arusKas.details.oprPengeluaranBeban)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Pembayaran penunjang operasional, ATK, & kepesantrenan</span>
+                  <span className="font-mono text-rose-600">-{formatRupiah(data.arusKas.details.oprPengeluaranLain)}</span>
+                </div>
+                <div className="flex justify-between pl-4 font-semibold text-slate-700 border-b border-dashed pb-1.5 pt-0.5">
+                  <span>Subtotal Arus Kas Keluar Operasional</span>
+                  <span className="font-mono text-slate-800">({formatRupiah(data.arusKas.details.totalOprOutflow)})</span>
+                </div>
+                <div className="flex justify-between pl-4 font-bold text-indigo-700 bg-indigo-50/40 p-2.5 rounded-lg border border-indigo-100/40">
+                  <span>Arus Kas Bersih Penyediaan dari Aktivitas Operasional</span>
+                  <span className="font-mono">{formatAccounting(data.arusKas.details.netOprCashFlow)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Arus Kas Investasi */}
+            <div className="space-y-4">
+              <h3 className="font-bold text-amber-900 bg-amber-50 px-4 py-2.5 rounded-xl text-sm flex justify-between items-center shadow-sm">
+                <span>II. ARUS KAS DARI AKTIVITAS INVESTASI</span>
+                <span className="font-mono">{formatAccounting(data.arusKas.details.netInvCashFlow)}</span>
+              </h3>
+              <div className="px-4 space-y-3.5 text-sm">
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Penerimaan dari divestasi/pelepasan aset sarana asrama</span>
+                  <span className="font-mono text-emerald-600 font-semibold">+{formatRupiah(data.arusKas.details.invPenerimaanAset)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Pengeluaran pengadaan alat lab, laptop komputer, & renovasi gedung</span>
+                  <span className="font-mono text-rose-600">-{formatRupiah(data.arusKas.details.invPengeluaranAset)}</span>
+                </div>
+                <div className="flex justify-between pl-4 font-bold text-amber-700 bg-amber-50/40 p-2.5 rounded-lg border border-amber-100/40">
+                  <span>Arus Kas Bersih Digunakan dalam Aktivitas Investasi</span>
+                  <span className="font-mono">{formatAccounting(data.arusKas.details.netInvCashFlow)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Arus Kas Pendanaan */}
+            <div className="space-y-4">
+              <h3 className="font-bold text-blue-900 bg-blue-50 px-4 py-2.5 rounded-xl text-sm flex justify-between items-center shadow-sm">
+                <span>III. ARUS KAS DARI AKTIVITAS PENDANAAN / PEMBIAYAAN</span>
+                <span className="font-mono">{formatAccounting(data.arusKas.details.netPenCashFlow)}</span>
+              </h3>
+              <div className="px-4 space-y-3.5 text-sm">
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Penerimaan dari dana pinjaman, kupon ZIS sukuk, & modal lembaga</span>
+                  <span className="font-mono text-emerald-600 font-semibold">+{formatRupiah(data.arusKas.details.penPenerimaanHutang)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-600">
+                  <span>Pembayaran hutang jangka panjang, pinjaman sarana, & komitmen</span>
+                  <span className="font-mono text-rose-600">-{formatRupiah(data.arusKas.details.penPengeluaranHutang)}</span>
+                </div>
+                <div className="flex justify-between pl-4 font-bold text-blue-700 bg-blue-50/40 p-2.5 rounded-lg border border-blue-100/40">
+                  <span>Arus Kas Bersih yang Terjadi dari Aktivitas Pendanaan</span>
+                  <span className="font-mono">{formatAccounting(data.arusKas.details.netPenCashFlow)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rekonsiliasi Kas */}
+            <div className="border-t-2 border-double border-slate-300 pt-8 space-y-4">
+              <div className="flex justify-between font-bold text-base text-slate-900 bg-slate-100/80 px-4 py-3 rounded-xl border border-slate-200">
+                <span>KENAIKAN / (PENURUNAN) BERSIH KAS & SETARA KAS</span>
+                <span className="font-mono text-indigo-700">{formatAccounting(data.arusKas.details.netCashFlowChange)}</span>
+              </div>
+              <div className="px-4 space-y-3.5 text-sm">
+                <div className="flex justify-between pl-4 text-slate-500 font-medium">
+                  <span>Saldo Kas dan Setara Kas pada Awal Periode</span>
+                  <span className="font-mono text-slate-700 font-bold">{formatRupiah(data.arusKas.details.totalSawalKas)}</span>
+                </div>
+                <div className="flex justify-between pl-4 text-slate-500 font-medium border-b pb-3.5 flex-row">
+                  <span>Selisih Kurs & Kenaikan Kas Berjalan</span>
+                  <span className="font-mono text-indigo-600 font-bold">{formatAccounting(data.arusKas.details.netCashFlowChange)}</span>
+                </div>
+                <div className="flex justify-between pl-4 font-bold text-base text-emerald-800 bg-emerald-50 px-5 py-4 rounded-xl border border-emerald-100 shadow-sm">
+                  <span>SALDO KAS DAN SETARA KAS PADA AKHIR PERIODE (REKONSILIASI)</span>
+                  <span className="font-mono text-emerald-700 text-lg font-bold">{formatRupiah(data.arusKas.details.totalSakhirKas)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Rekonsiliasi Cash accounts table */}
+            <div className="bg-slate-50/70 p-5 rounded-2xl border border-natural-border space-y-3 mt-4 print:hidden">
+              <h4 className="font-bold text-xs uppercase tracking-wider text-slate-500 flex items-center gap-1.5 font-mono select-none">
+                <Info className="w-4 h-4 text-indigo-600 shrink-0" /> TABEL INDIKATOR AKUN REKONSILIATOR KAS (COA):
+              </h4>
+              <div className="divide-y divide-slate-100">
+                {data.arusKas.cashAccounts.map((c: any) => (
+                  <div key={c.id} className="flex justify-between items-center py-2 text-xs text-slate-600 font-sans">
+                    <span className="font-medium">{c.code} - {c.name}</span>
+                    <span className="font-mono font-bold text-slate-700 bg-white border border-slate-200/80 px-2 py-0.5 rounded-md">{formatRupiah(c.balance)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="max-w-4xl mx-auto space-y-12 text-left text-slate-800">
+            {calkSuccessMsg && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                className="p-3.5 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2 shadow-sm font-sans"
+              >
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{calkSuccessMsg}</span>
+              </motion.div>
+            )}
+
+            {/* I. General Information */}
+            <div className="space-y-4">
+              <h3 className="font-serif italic font-bold text-indigo-900 border-b pb-2 text-base uppercase tracking-wider">
+                BAB I. GAMBARAN UMUM ENTITAS
+              </h3>
+              <div className="text-sm leading-relaxed text-slate-650 space-y-3 font-sans">
+                <p>
+                  <strong>Sekolah Cendekia Baznas (SCB)</strong> merupakan model sekolah bebas biaya berasrama yang diinisiasi oleh Badan Amil Zakat Nasional (BAZNAS) untuk membina santri dari latar belakang mustahik/dhuafa berprestasi dari seluruh penjuru Indonesia. 
+                </p>
+                <p>
+                  Sekolah beralamat lengkap di Jl. Terusan Babakan Madang, Desa Cemplang, Kecamatan Cibungbulang, Kabupaten Bogor, Jawa Barat. Laporan Keuangan ini disiapkan sebagai bentuk tata kelola pilar akuntabilitas publik yang transparan (<i>Aman Syar'i, Aman Regulasi, Aman NKRI</i>).
+                </p>
+                
+                {/* School Administrative Editable Inputs */}
+                <div className="bg-slate-550/5 p-5 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 print:border-none print:bg-transparent print:p-0">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Kepala Sekolah (SCB)</label>
+                    <input 
+                      type="text" 
+                      value={calkKepalaSekolah}
+                      onChange={(e) => setCalkKepalaSekolah(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Bendahara / PJ Keuangan</label>
+                    <input 
+                      type="text" 
+                      value={calkBendahara}
+                      onChange={(e) => setCalkBendahara(e.target.value)}
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* II. Accounting Policies */}
+            <div className="space-y-4">
+              <h3 className="font-serif italic font-bold text-indigo-900 border-b pb-2 text-base uppercase tracking-wider">
+                BAB II. KEBIJAKAN AKUNTANSI SIGNIFIKAN
+              </h3>
+              <div className="text-sm leading-relaxed text-slate-650 space-y-3 font-sans">
+                <div>
+                  <span className="font-semibold text-slate-700 block text-xs uppercase tracking-wider mb-1">1. Basis Pengukuran Laporan Keuangan</span>
+                  <p>
+                    Laporan keuangan disusun berdasarkan kombinasi basis kas dan akrual dalam pencatatan transaksi pembukuan berpasangan. Pendapatan diakui pada saat kas diterima secara riil dari donasi/ZIS, sementara beban diakui saat timbulnya kewajiban atau realisasi pengeluaran kas operasional.
+                  </p>
+                </div>
+                <div>
+                  <span className="font-semibold text-slate-700 block text-xs uppercase tracking-wider mb-1">2. Penyajian Laporan Sesuai Regulasi Sekolah</span>
+                  <p>
+                    Klasifikasi akun mengacu pada sistem bagan akun standar (COA) Sekolah Cendekia Baznas. Mata uang pelaporan yang digunakan adalah mata uang rupiah Republik Indonesia (IDR) secara utuh tanpa pembulatan jutaan untuk menjaga keakuratan detail pelaporan santri.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* III. Breakdown & Analysis */}
+            <div className="space-y-4">
+              <h3 className="font-serif italic font-bold text-indigo-900 border-b pb-2 text-base uppercase tracking-wider">
+                BAB III. RINCIAN POS-POS LAPORAN KEUANGAN
+              </h3>
+              
+              <div className="space-y-6 font-sans text-sm">
+                {/* 1. Pos Aset */}
+                <div className="space-y-2">
+                  <div className="flex justify-between font-bold text-slate-800 bg-slate-50 p-2.5 rounded">
+                    <span>1. ANALISIS POS ASET</span>
+                    <span className="font-mono">{formatRupiah(data.neraca.totalAset)}</span>
+                  </div>
+                  <p className="text-xs text-slate-500 italic leading-relaxed">
+                    Aset Sekolah Cendekia Baznas terdiri dari Kas, Bank, Piutang Operasional serta Peralatan/Aset Tetap Sekolah. Rincian nominal dan kontribusi masing-masing pos as follows:
+                  </p>
+                  <div className="divide-y divide-slate-100 pl-4">
+                    {data.neraca.aset.map((a: any) => {
+                      const pct = data.neraca.totalAset > 0 ? (a.balance / data.neraca.totalAset) * 100 : 0;
+                      return (
+                        <div key={a.id} className="flex justify-between py-2 text-xs">
+                          <span className="text-slate-600 font-medium">{a.code} - {a.name}</span>
+                          <span className="font-mono text-slate-500 font-semibold">
+                            {formatRupiah(a.balance)} <span className="text-[10px] text-gray-400 ml-2 font-normal">({pct.toFixed(1)}%)</span>
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. Pos Pendapatan & Beban */}
+                <div className="space-y-2">
+                  <div className="flex justify-between font-bold text-slate-800 bg-slate-50 p-2.5 rounded">
+                    <span>2. EVALUASI POS PENERIMAAN & BEBAN (AKTIVITAS)</span>
+                    <span className="font-mono">{formatRupiah(data.aktivitas.surplusDefisit)} (Surplus)</span>
+                  </div>
+                  <p className="text-xs text-slate-500 italic leading-relaxed">
+                    Total penerimaan periodik tercatat sebesar <b className="text-emerald-700 font-semibold font-sans">{formatRupiah(data.aktivitas.totalPendapatan)}</b> disalurkan secara efisien untuk mendukung biaya asrama serta pengajaran santri dengan total penyerapan beban sebesar <b className="text-rose-700 font-semibold font-sans">{formatRupiah(data.aktivitas.totalBeban)}</b>.
+                  </p>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-3">
+                    <div className="space-y-1 bg-emerald-50/45 p-3.5 rounded-xl border border-emerald-100/60 text-left">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-emerald-800 select-none">Penerimaan Kontributor Tertinggi:</h4>
+                      {data.aktivitas.pendapatan.length > 0 ? (
+                        (() => {
+                          const topInc = [...data.aktivitas.pendapatan].sort((a,b) => b.balance - a.balance)[0];
+                          return (
+                            <div className="text-xs font-medium text-slate-600 pt-1">
+                              {topInc.name} sebesar <span className="font-bold font-mono text-emerald-700">{formatRupiah(topInc.balance)}</span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="text-xs text-gray-400 italic pt-1">Belum ada pendapatan terekam</div>
+                      )}
+                    </div>
+
+                    <div className="space-y-1 bg-rose-50/45 p-3.5 rounded-xl border border-rose-100/60 text-left">
+                      <h4 className="font-bold text-xs uppercase tracking-wider text-rose-800 select-none">Penyerapan Beban Terbesar:</h4>
+                      {data.aktivitas.beban.length > 0 ? (
+                        (() => {
+                          const topExp = [...data.aktivitas.beban].sort((a,b) => b.balance - a.balance)[0];
+                          return (
+                            <div className="text-xs font-medium text-slate-600 pt-1">
+                              {topExp.name} sebesar <span className="font-bold font-mono text-rose-700">{formatRupiah(topExp.balance)}</span>
+                            </div>
+                          );
+                        })()
+                      ) : (
+                        <div className="text-xs text-gray-400 italic pt-1">Belum ada beban operasional terekam</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* IV. Narrative Comments Editor */}
+            <div className="space-y-4">
+              <h3 className="font-serif italic font-bold text-indigo-900 border-b pb-2 text-base uppercase tracking-wider flex justify-between items-center select-none">
+                <span>BAB IV. KETERANGAN & CATATAN KHUSUS AKTIVITAS</span>
+              </h3>
+              <div className="text-sm font-sans space-y-3">
+                <p className="text-xs text-slate-500 leading-relaxed italic print:hidden">
+                  Gunakan kolom editor di bawah ini untuk menambahkan narasi penjelas khusus (misalnya: rincian utang piutang santri, hambatan operasional, catatan hibah) yang akan langsung ikut terekam saat dokumen dicetak atau diprinter:
+                </p>
+                
+                <textarea 
+                  rows={8}
+                  value={calkCatatanTambahan}
+                  onChange={(e) => setCalkCatatanTambahan(e.target.value)}
+                  placeholder="Ketik catatan tambahan laporan di sini..."
+                  className="w-full p-4 text-xs font-sans text-slate-700 bg-white border border-slate-300 rounded-2xl focus:outline-none focus:border-indigo-500 shadow-inner leading-relaxed print:border-none print:bg-transparent print:p-0 print:shadow-none"
+                />
+
+                <div className="flex justify-end pt-1 print:hidden">
+                  <button
+                    type="button"
+                    onClick={handleSaveCalk}
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-md flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Save className="w-4 h-4" /> Simpan Narasi Catatan
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Administrative Signature Block */}
+            <div className="pt-12 grid grid-cols-2 text-center text-sm font-sans">
+              <div className="space-y-16">
+                <div>
+                  <p className="text-slate-400 font-medium">Disiapkan Oleh,</p>
+                  <p className="text-slate-800 font-bold uppercase tracking-wider text-xs pt-1">PJ KEUANGAN SEKOLAH</p>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-700 underline">{calkBendahara || '(Belum Diatur)'}</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest leading-none font-semibold pt-1">Staf Keuangan SCB</p>
+                </div>
+              </div>
+              
+              <div className="space-y-16">
+                <div>
+                  <p className="text-slate-400 font-medium font-sans font-medium">Mengetahui & Menyetujui,</p>
+                  <p className="text-slate-800 font-bold uppercase tracking-wider text-xs pt-1">KEPALA SEKOLAH SCB</p>
+                </div>
+                <div>
+                  <p className="font-bold text-slate-700 underline">{calkKepalaSekolah || '(Belum Diatur)'}</p>
+                  <p className="text-[10px] text-slate-400 uppercase tracking-widest leading-none font-semibold pt-1 font-sans">Pimpinan Lembaga</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>
