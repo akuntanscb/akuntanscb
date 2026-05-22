@@ -1,7 +1,8 @@
-import { collection, doc, getDocs, query, setDoc, where, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { collection, doc, getDoc, getDocs, query, setDoc, where, writeBatch, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 import { Account } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
+import { backupDeletedRecord } from './trashService';
 
 const INITIAL_COA: Partial<Account>[] = [
   // ASET
@@ -92,6 +93,10 @@ export const deleteAccount = async (accountId: string) => {
   const path = `accounts/${accountId}`;
   try {
     const docRef = doc(db, 'accounts', accountId);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await backupDeletedRecord('accounts', accountId, snap.data(), auth.currentUser?.uid || 'system');
+    }
     await deleteDoc(docRef);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);

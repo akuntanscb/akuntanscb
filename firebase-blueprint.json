@@ -94,6 +94,20 @@
         "invoiceTemplate": { "type": "string", "enum": ["classic", "modern", "minimalist"], "description": "Desain templat faktur" }
       },
       "required": ["currency", "language", "fontFamily", "fontSize", "systemName", "systemSubName", "logoType", "colorTheme", "invoiceTemplate"]
+    },
+    "DeletedRecord": {
+      "title": "Data Tempat Sampah",
+      "description": "Cadangan data yang dihapus agar dapat dipulihkan dengan aman.",
+      "type": "object",
+      "properties": {
+        "originalId": { "type": "string", "description": "ID dokumen asli" },
+        "originalCollection": { "type": "string", "enum": ["journal_entries", "debts_receivables", "accounts"], "description": "Koleksi asal dokumen" },
+        "deletedAt": { "type": "string", "format": "date-time", "description": "Waktu dokumen dihapus" },
+        "deletedBy": { "type": "string", "description": "UID User yang menghapus" },
+        "metadata": { "type": "object", "description": "Meta ringkasan visual barang terhapus" },
+        "data": { "type": "object", "description": "Raw data asli dari dokumen" }
+      },
+      "required": ["originalId", "originalCollection", "deletedAt", "deletedBy", "metadata", "data"]
     }
   },
   "firestore": {
@@ -116,6 +130,10 @@
     "system_settings": {
       "schema": "SystemSetting",
       "description": "Koleksi konfigurasi administratif global."
+    },
+    "deleted_records": {
+      "schema": "DeletedRecord",
+      "description": "Koleksi data cadangan terhapus untuk pemulihan."
     }
   }
 }

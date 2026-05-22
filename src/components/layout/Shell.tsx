@@ -14,7 +14,8 @@ import {
   School,
   Shield,
   Sliders,
-  Database
+  Database,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -56,6 +57,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { name: t('reports'), path: '/laporan', icon: PieChart },
     { name: t('coa'), path: '/coa', icon: Sliders },
     { name: t('settings'), path: '/pengaturan', icon: Settings },
+    { 
+      name: settings.language === 'en' ? 'Recycle Bin' : (settings.language === 'ar' ? 'سلة المهملات' : 'Tempat Sampah'), 
+      path: '/trash', 
+      icon: Trash2 
+    },
   ];
 
   if (!user) {

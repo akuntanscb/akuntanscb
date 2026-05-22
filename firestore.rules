@@ -123,5 +123,24 @@ service cloud.firestore {
       allow update: if isSignedIn() && isValidId(settingId) && isValidSystemSetting(incoming());
       allow delete: if false;
     }
+
+    // --- Deleted Records (Recycle Bin / Safety Feature) ---
+    function isValidDeletedRecord(data) {
+      return data.originalId is string && data.originalId.size() <= 128 &&
+             data.originalCollection in ['journal_entries', 'debts_receivables', 'accounts'] &&
+             (data.deletedAt is timestamp || data.deletedAt is string) &&
+             data.deletedBy == request.auth.uid &&
+             data.metadata is map &&
+             data.data is map &&
+             data.metadata.title is string && data.metadata.title.size() <= 1000 &&
+             data.metadata.subtitle is string && data.metadata.subtitle.size() <= 1000;
+    }
+
+    match /deleted_records/{recordId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidDeletedRecord(incoming());
+      allow update: if false; // Cannot modify deleted items
+      allow delete: if isSignedIn();
+    }
   }
 }

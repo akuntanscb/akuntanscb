@@ -1,7 +1,8 @@
-import { addDoc, collection, doc, getDocs, orderBy, query, Timestamp, where, updateDoc, deleteDoc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, query, Timestamp, where, updateDoc, deleteDoc } from 'firebase/firestore';
+import { db, auth } from '../lib/firebase';
 import { JournalEntry, JournalLine } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
+import { backupDeletedRecord } from './trashService';
 import { syncJournalToDebtControl, deleteSyncedDebtControl } from './debtService';
 
 export const createJournalEntry = async (
@@ -148,6 +149,11 @@ export const deleteJournalEntry = async (id: string) => {
   const path = `journal_entries/${id}`;
   try {
     const docRef = doc(db, 'journal_entries', id);
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      await backupDeletedRecord('journal_entries', id, snap.data(), auth.currentUser?.uid || 'system');
+    }
+
     await deleteDoc(docRef);
 
     try {

@@ -11,10 +11,11 @@ import {
   updateDoc, 
   deleteDoc 
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { db, auth } from '../lib/firebase';
 import { DebtReceivable, DebtPayment } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
 import { getAccounts } from './accountService';
+import { backupDeletedRecord } from './trashService';
 
 const COLLECTION_PATH = 'debts_receivables';
 
@@ -368,8 +369,17 @@ export const deleteDebt = async (debtId: string): Promise<void> => {
     if (docSnap.exists()) {
       const currentData = docSnap.data() as DebtReceivable;
       const journalId = (currentData as any).journalId;
+
+      // 1. Back up the debt record
+      await backupDeletedRecord('debts_receivables', debtId, currentData, auth.currentUser?.uid || 'system');
+
+      // 2. If it has a matching linked journal entry, back up and delete it as well
       if (journalId) {
         const journalDocRef = doc(db, 'journal_entries', journalId);
+        const journalSnap = await getDoc(journalDocRef);
+        if (journalSnap.exists()) {
+          await backupDeletedRecord('journal_entries', journalId, journalSnap.data(), auth.currentUser?.uid || 'system');
+        }
         await deleteDoc(journalDocRef);
       }
     }
