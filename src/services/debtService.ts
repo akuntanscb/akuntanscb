@@ -27,6 +27,15 @@ export const generateDpRefNumber = (): string => {
   return `UM-${year}${month}${day}-${rand}`;
 };
 
+export const generateHutangRefNumber = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(100 + Math.random() * 900);
+  return `HT-${year}${month}${day}-${rand}`;
+};
+
 export const getDebts = async (): Promise<DebtReceivable[]> => {
   try {
     const q = query(collection(db, COLLECTION_PATH), orderBy('date', 'desc'));
@@ -109,7 +118,9 @@ export const createDebt = async (
       }
     }
 
-    const refNum = isUangMuka ? generateDpRefNumber() : '';
+    const refNum = isUangMuka 
+      ? generateDpRefNumber() 
+      : (type === 'Hutang' ? generateHutangRefNumber() : '');
 
     // 2. Draft & save automatically balanced Journal entry
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
@@ -539,6 +550,9 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
         const dueDate = new Date(date);
         dueDate.setDate(dueDate.getDate() + 30);
 
+        const refNum = generateHutangRefNumber();
+        const pic = journalEntry.picName || '';
+
         await addDoc(collection(db, COLLECTION_PATH), {
           type: 'Hutang',
           name: description,
@@ -553,7 +567,9 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           payments: [],
           createdBy,
           createdAt: Timestamp.now(),
-          journalId
+          journalId,
+          picName: pic,
+          dpRefNumber: refNum
         });
       }
 
@@ -638,29 +654,45 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
 
       // - Debit to a Hutang account (paying off a debt)
       else if (isHutangAccount && line.debit > 0) {
-        const qHutang = query(
-          collection(db, COLLECTION_PATH), 
-          where('type', '==', 'Hutang'), 
-          where('status', '!=', 'Lunas')
-        );
-        const activeHutangs = await getDocs(qHutang);
-        
         let matchedDebt: any = null;
-        const journalDescLower = description.toLowerCase();
 
-        for (const docObj of activeHutangs.docs) {
-          const debtData = docObj.data();
-          if (journalDescLower.includes(debtData.name.toLowerCase()) || debtData.name.toLowerCase().includes(journalDescLower)) {
-            matchedDebt = { id: docObj.id, ...debtData };
-            break;
+        // Prioritize matching explicitly by dpRefNumber if provided
+        const linkedRefNum = journalEntry.dpRefNumber;
+        if (linkedRefNum) {
+          const qRef = query(
+            collection(db, COLLECTION_PATH),
+            where('dpRefNumber', '==', linkedRefNum)
+          );
+          const refSnap = await getDocs(qRef);
+          if (!refSnap.empty) {
+            matchedDebt = { id: refSnap.docs[0].id, ...refSnap.docs[0].data() };
           }
         }
 
-        if (!matchedDebt && !activeHutangs.empty) {
-          const sorted = activeHutangs.docs
-            .map(d => ({ id: d.id, ...d.data() } as any))
-            .sort((a, b) => a.date.seconds - b.date.seconds);
-          matchedDebt = sorted[0];
+        if (!matchedDebt) {
+          const qHutang = query(
+            collection(db, COLLECTION_PATH), 
+            where('type', '==', 'Hutang'), 
+            where('status', '!=', 'Lunas')
+          );
+          const activeHutangs = await getDocs(qHutang);
+          
+          const journalDescLower = description.toLowerCase();
+
+          for (const docObj of activeHutangs.docs) {
+            const debtData = docObj.data();
+            if (journalDescLower.includes(debtData.name.toLowerCase()) || debtData.name.toLowerCase().includes(journalDescLower)) {
+              matchedDebt = { id: docObj.id, ...debtData };
+              break;
+            }
+          }
+
+          if (!matchedDebt && !activeHutangs.empty) {
+            const sorted = activeHutangs.docs
+              .map(d => ({ id: d.id, ...d.data() } as any))
+              .sort((a, b) => a.date.seconds - b.date.seconds);
+            matchedDebt = sorted[0];
+          }
         }
 
         if (matchedDebt) {

@@ -37,6 +37,48 @@ export default function Journal() {
   const [deleteError, setDeleteError] = useState('');
   const [isDeletingLoading, setIsDeletingLoading] = useState(false);
 
+  // Filter States
+  const [filterText, setFilterText] = useState('');
+  const [filterAccount, setFilterAccount] = useState('');
+  const [filterStartDate, setFilterStartDate] = useState('');
+  const [filterEndDate, setFilterEndDate] = useState('');
+
+  // Bulk Delete States
+  const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
+  const [bulkDeleteConfirmOpen, setBulkDeleteConfirmOpen] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [bulkDeleteError, setBulkDeleteError] = useState('');
+
+  const handleResetFilters = () => {
+    setFilterText('');
+    setFilterAccount('');
+    setFilterStartDate('');
+    setFilterEndDate('');
+  };
+
+  const handleToggleSelectEntry = (id: string) => {
+    setSelectedEntryIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  // Safe reset when form closes/opens
+  const handleCancelForm = () => {
+    setShowForm(false);
+    setIsEditingMode(false);
+    setEditingEntry(null);
+    setDescription('');
+    setReference('');
+    setPicName('');
+    setSelectedDpRef('');
+    setDate(format(new Date(), 'yyyy-MM-dd'));
+    setLines([
+      { accountId: '', accountName: '', debit: 0, credit: 0 },
+      { accountId: '', accountName: '', debit: 0, credit: 0 },
+    ]);
+    setError('');
+  };
+
   useEffect(() => {
     fetchData();
   }, []);
@@ -68,22 +110,6 @@ export default function Journal() {
       newLines[index][field] = Number(value);
     }
     setLines(newLines);
-  };
-
-  const handleCancelForm = () => {
-    setShowForm(false);
-    setIsEditingMode(false);
-    setEditingEntry(null);
-    setDescription('');
-    setReference('');
-    setPicName('');
-    setSelectedDpRef('');
-    setDate(format(new Date(), 'yyyy-MM-dd'));
-    setLines([
-      { accountId: '', accountName: '', debit: 0, credit: 0 },
-      { accountId: '', accountName: '', debit: 0, credit: 0 },
-    ]);
-    setError('');
   };
 
   const handleEditClick = (entry: JournalEntry) => {
@@ -162,6 +188,89 @@ export default function Journal() {
   const totalCredit = lines.reduce((sum, l) => sum + l.credit, 0);
   const isBalanced = Math.abs(totalDebit - totalCredit) < 0.01;
 
+  // Computed Filtered Entries
+  const filteredEntries = entries.filter(entry => {
+    // 1. Text Search (Description, Reference, PIC, or account details)
+    if (filterText) {
+      const lowerText = filterText.toLowerCase();
+      const descMatch = entry.description?.toLowerCase().includes(lowerText);
+      const refMatch = entry.reference?.toLowerCase().includes(lowerText);
+      const picMatch = (entry as any).picName?.toLowerCase().includes(lowerText);
+      
+      const lineMatch = entry.lines.some(l => 
+        l.accountName?.toLowerCase().includes(lowerText) ||
+        accounts.find(a => a.id === l.accountId)?.code?.toLowerCase().includes(lowerText) ||
+        accounts.find(a => a.id === l.accountId)?.name?.toLowerCase().includes(lowerText)
+      );
+
+      if (!descMatch && !refMatch && !picMatch && !lineMatch) {
+        return false;
+      }
+    }
+
+    // 2. Account Filter
+    if (filterAccount) {
+      const hasAccount = entry.lines.some(l => l.accountId === filterAccount);
+      if (!hasAccount) return false;
+    }
+
+    // 3. Date Filters
+    if (entry.date) {
+      const entryDate = entry.date.toDate();
+      const dateStr = format(entryDate, 'yyyy-MM-dd');
+
+      if (filterStartDate && dateStr < filterStartDate) {
+        return false;
+      }
+      if (filterEndDate && dateStr > filterEndDate) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+
+  // Sorted list: Last inputted (createdAt descending)
+  const sortedAndFilteredEntries = [...filteredEntries].sort((a, b) => {
+    const timeA = a.createdAt?.seconds || a.date?.seconds || 0;
+    const timeB = b.createdAt?.seconds || b.date?.seconds || 0;
+    return timeB - timeA;
+  });
+
+  const handleSelectAllEntries = (checked: boolean) => {
+    if (checked) {
+      setSelectedEntryIds(filteredEntries.map(e => e.id));
+    } else {
+      setSelectedEntryIds([]);
+    }
+  };
+
+  const handleBulkDeleteClick = () => {
+    setBulkDeleteError('');
+    setBulkDeleteConfirmOpen(true);
+  };
+
+  const handleBulkDeleteConfirm = async () => {
+    setIsBulkDeleting(true);
+    setBulkDeleteError('');
+    let successCount = 0;
+    try {
+      for (const id of selectedEntryIds) {
+        await deleteJournalEntry(id);
+        successCount++;
+      }
+      setSelectedEntryIds([]);
+      setBulkDeleteConfirmOpen(false);
+      fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setBulkDeleteError(`Berhasil menghapus ${successCount} dari ${selectedEntryIds.length} entri. Error: ${err.message || 'Gagal menghapus beberapa entri.'}`);
+      fetchData();
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const hasCreditUangMuka = lines.some((line) => {
     if (!line.accountId || !line.credit || line.credit <= 0) return false;
     const acc = accounts.find((a) => a.id === line.accountId);
@@ -170,12 +279,23 @@ export default function Journal() {
     return name.includes('uang muka') || name.includes('panjar') || name.includes('dp');
   });
 
-  // Automatically reset selectedDpRef if hasCreditUangMuka becomes false
+  const hasDebitHutang = lines.some((line) => {
+    if (!line.accountId || !line.debit || line.debit <= 0) return false;
+    const acc = accounts.find((a) => a.id === line.accountId);
+    if (!acc) return false;
+    const isHutang = acc.category === 'Liabilitas' && 
+      (acc.subCategory?.toLowerCase()?.includes('hutang') || 
+       acc.subCategory?.toLowerCase()?.includes('kewajiban') || 
+       acc.name.toLowerCase().includes('hutang'));
+    return isHutang;
+  });
+
+  // Automatically reset selectedDpRef if hasCreditUangMuka and hasDebitHutang become false
   useEffect(() => {
-    if (!hasCreditUangMuka) {
+    if (!hasCreditUangMuka && !hasDebitHutang) {
       setSelectedDpRef('');
     }
-  }, [hasCreditUangMuka]);
+  }, [hasCreditUangMuka, hasDebitHutang]);
 
   const handleSelectDpRef = (refNum: string) => {
     setSelectedDpRef(refNum);
@@ -187,6 +307,19 @@ export default function Journal() {
       }
       const originalRemarks = um.remarks || 'Uang Muka';
       setDescription(`Laporan Pertanggungjawaban ${originalRemarks} [Ref: ${um.dpRefNumber}]`);
+    }
+  };
+
+  const handleSelectHutangRef = (refNum: string) => {
+    setSelectedDpRef(refNum);
+    if (!refNum) return;
+    const debt = debts.find((d) => d.dpRefNumber === refNum);
+    if (debt) {
+      if (debt.picName) {
+        setPicName(debt.picName);
+      }
+      const originalName = debt.name || 'Hutang';
+      setDescription(`Pembayaran Hutang: ${originalName} [Ref: ${debt.dpRefNumber}]`);
     }
   };
 
@@ -271,6 +404,45 @@ export default function Journal() {
                       </div>
                       <div className="text-xs text-emerald-700 leading-relaxed font-sans flex items-center pr-2">
                         Memilih referensi akan otomatis mengisi nama Penanggung Jawab (PIC) dan menyusun keterangan jurnal penyelesaian laporan uang muka secara otomatis.
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {hasDebitHutang && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="bg-indigo-50/70 border border-indigo-150 p-4 rounded-xl space-y-2 mb-2">
+                    <div className="text-xs font-bold text-indigo-800 uppercase tracking-wider flex items-center gap-1.5">
+                      <span>Pilih Hutang yang Diselesaikan</span>
+                      <span className="bg-indigo-100 text-indigo-700 text-[10px] px-2 py-0.5 rounded-full font-semibold">
+                        Liability Settlement Sync
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <select
+                          value={selectedDpRef}
+                          onChange={(e) => handleSelectHutangRef(e.target.value)}
+                          className="w-full px-4 py-2 border border-indigo-250 bg-white rounded-lg text-sm text-indigo-950 font-medium outline-none focus:ring-2 focus:ring-indigo-500 transition-all cursor-pointer"
+                        >
+                          <option value="">-- Hubungkan Nomor Referensi Hutang --</option>
+                          {debts
+                            .filter((d) => d.type === 'Hutang' && d.dpRefNumber && (d.status !== 'Lunas' || d.dpRefNumber === selectedDpRef))
+                            .map((d) => (
+                              <option key={d.id} value={d.dpRefNumber}>
+                                {d.dpRefNumber} - {d.name} (Sisa: {formatRupiah(d.remainingBalance)})
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+                      <div className="text-xs text-indigo-700 leading-relaxed font-sans flex items-center pr-2">
+                        Memilih referensi akan otomatis mengisi nama Penanggung Jawab (PIC) dan menyusun keterangan jurnal pembayaran hutang secara otomatis berdasarkan data transaksi asal.
                       </div>
                     </div>
                   </div>
@@ -421,11 +593,114 @@ export default function Journal() {
         </motion.div>
       )}
 
+      {/* Filters Section */}
+      <div className="bg-white p-6 rounded-3xl border border-natural-border shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          {/* Text Search */}
+          <div className="flex-1 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Cari Jurnal</span>
+            <input
+              type="text"
+              placeholder="Cari keterangan, referensi, akun, atau PIC..."
+              value={filterText}
+              onChange={(e) => setFilterText(e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+            />
+          </div>
+
+          {/* Account Filter */}
+          <div className="w-full md:w-64 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter Akun</span>
+            <select
+              value={filterAccount}
+              onChange={(e) => setFilterAccount(e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
+            >
+              <option value="">Semua Akun</option>
+              {accounts.sort((a,b) => a.code.localeCompare(b.code)).map(acc => (
+                <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Start Date */}
+          <div className="w-full md:w-44 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Mulai Tanggal</span>
+            <input
+              type="date"
+              value={filterStartDate}
+              onChange={(e) => setFilterStartDate(e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+            />
+          </div>
+
+          {/* End Date */}
+          <div className="w-full md:w-44 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Sampai Tanggal</span>
+            <input
+              type="date"
+              value={filterEndDate}
+              onChange={(e) => setFilterEndDate(e.target.value)}
+              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+            />
+          </div>
+
+          {/* Reset Filters */}
+          {(filterText || filterAccount || filterStartDate || filterEndDate) && (
+            <button
+              onClick={handleResetFilters}
+              className="px-4 py-2 bg-slate-50 border border-slate-205 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1.5 h-[38px] shrink-0 cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" /> Bersihkan
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Bulk Action Bar of Selected Entries */}
+      <AnimatePresence>
+        {selectedEntryIds.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 15 }}
+            className="bg-natural-primary text-white p-4 rounded-3xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-md border border-emerald-850"
+          >
+            <div className="flex items-center gap-2">
+              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold font-mono text-emerald-100">
+                {selectedEntryIds.length}
+              </span>
+              <span className="text-sm font-medium font-serif italic text-emerald-50">Entri Jurnal Umum terpilih untuk tindakan massal</span>
+            </div>
+            <button
+              onClick={handleBulkDeleteClick}
+              className="w-full sm:w-auto px-5 py-2.5 bg-rose-650 hover:bg-rose-700 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer border border-rose-500"
+            >
+              <Trash2 className="w-4 h-4" /> Hapus Terpilih
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Journal Table */}
       <div className="bg-white rounded-3xl border border-natural-border shadow-sm overflow-hidden">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50/50 border-b border-natural-border">
+              <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
+                <input
+                  type="checkbox"
+                  checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
+                  ref={(input) => {
+                    if (input) {
+                      input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
+                    }
+                  }}
+                  onChange={(e) => handleSelectAllEntries(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
+                  title="Pilih semua baris yang terfilter"
+                />
+              </th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
@@ -436,72 +711,89 @@ export default function Journal() {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {entries.map((entry) => (
-              <React.Fragment key={entry.id}>
-                {entry.lines.map((line, lIdx) => (
-                  <tr key={`${entry.id}-${lIdx}`} className="hover:bg-slate-50/50 transition-colors">
-                    <td className="px-6 py-3 text-sm text-slate-500">
-                      {lIdx === 0 ? format(entry.date.toDate(), 'dd/MM/yyyy') : ''}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-slate-500">
-                      {lIdx === 0 ? entry.reference : ''}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-slate-700 font-medium">
-                      {lIdx === 0 ? (
-                        <div>
-                          <div>{entry.description}</div>
-                          {(entry as any).picName && (
-                            <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-semibold uppercase tracking-wider">
-                              PIC: {(entry as any).picName}
-                            </div>
-                          )}
-                        </div>
-                      ) : ''}
-                    </td>
-                    <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
-                      <span className="inline-flex items-center gap-2">
-                        <span className="font-mono text-xs text-natural-primary/70 bg-natural-primary/5 px-1.5 py-0.5 rounded border border-natural-border">
-                          {accounts.find(a => a.id === line.accountId)?.code || ''}
-                        </span>
-                        <span className="font-medium text-slate-750">
-                          {accounts.find(a => a.id === line.accountId)?.name || line.accountName}
-                        </span>
-                      </span>
-                    </td>
-                    <td className="px-6 py-3 text-sm text-right font-mono text-emerald-600">
-                      {line.debit > 0 ? formatRupiah(line.debit) : ''}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
-                      {line.credit > 0 ? formatRupiah(line.credit) : ''}
-                    </td>
-                    {lIdx === 0 && (
-                      <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handleEditClick(entry)}
-                            className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
-                            title="Edit Jurnal"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(entry)}
-                            className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
-                            title="Hapus Jurnal"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-            {entries.length === 0 && (
+            {entries.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
               </tr>
+            ) : sortedAndFilteredEntries.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-6 py-12 text-center text-slate-400">Tidak ada transaksi jurnal yang cocok dengan filter pencarian.</td>
+              </tr>
+            ) : (
+              sortedAndFilteredEntries.map((entry) => (
+                <React.Fragment key={entry.id}>
+                  {entry.lines.map((line, lIdx) => (
+                    <tr key={`${entry.id}-${lIdx}`} className="hover:bg-slate-50/50 transition-colors">
+                      {lIdx === 0 && (
+                        <td className="px-4 py-3 text-center border-r border-slate-100 select-none bg-slate-50/5 w-12" rowSpan={entry.lines.length}>
+                          <div className="flex justify-center items-center h-full">
+                            <input
+                              type="checkbox"
+                              checked={selectedEntryIds.includes(entry.id)}
+                              onChange={() => handleToggleSelectEntry(entry.id)}
+                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                            />
+                          </div>
+                        </td>
+                      )}
+                      <td className="px-6 py-3 text-sm text-slate-500">
+                        {lIdx === 0 ? format(entry.date.toDate(), 'dd/MM/yyyy') : ''}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-slate-500">
+                        {lIdx === 0 ? entry.reference : ''}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-slate-700 font-medium pb-4">
+                        {lIdx === 0 ? (
+                          <div>
+                            <div>{entry.description}</div>
+                            {(entry as any).picName && (
+                              <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-semibold uppercase tracking-wider">
+                                PIC: {(entry as any).picName}
+                              </div>
+                            )}
+                          </div>
+                        ) : ''}
+                      </td>
+                      <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
+                        <span className="inline-flex items-center gap-2">
+                          <span className="font-mono text-xs text-natural-primary/70 bg-natural-primary/5 px-1.5 py-0.5 rounded border border-natural-border">
+                            {accounts.find(a => a.id === line.accountId)?.code || ''}
+                          </span>
+                          <span className="font-medium text-slate-750">
+                            {accounts.find(a => a.id === line.accountId)?.name || line.accountName}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right font-mono text-emerald-600">
+                        {line.debit > 0 ? formatRupiah(line.debit) : ''}
+                      </td>
+                      <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
+                        {line.credit > 0 ? formatRupiah(line.credit) : ''}
+                      </td>
+                      {lIdx === 0 && (
+                        <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              onClick={() => handleEditClick(entry)}
+                              className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
+                              title="Edit Jurnal"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteClick(entry)}
+                              className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
+                              title="Hapus Jurnal"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </React.Fragment>
+              ))
             )}
           </tbody>
         </table>
@@ -573,6 +865,81 @@ export default function Journal() {
                     className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 shadow-md shadow-rose-600/10 transition-colors"
                   >
                     {isDeletingLoading ? 'Menghapus...' : 'Hapus Jurnal'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Delete Confirmation Modal */}
+      <AnimatePresence>
+        {bulkDeleteConfirmOpen && selectedEntryIds.length > 0 && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white rounded-3xl border border-natural-border shadow-2xl max-w-md w-full overflow-hidden"
+            >
+              <div className="p-6 border-b border-natural-border bg-rose-50/10 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-50 flex items-center justify-center text-rose-600 shrink-0">
+                  <AlertCircle className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-serif italic text-rose-700">Konfirmasi Penghapusan Massal</h3>
+                  <p className="text-[10px] text-gray-400 uppercase tracking-wider">Tindakan ini permanen</p>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4">
+                {bulkDeleteError && (
+                  <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-xs rounded-xl flex items-center gap-2">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{bulkDeleteError}</span>
+                  </div>
+                )}
+
+                <p className="text-sm text-slate-700 leading-relaxed font-sans">
+                  Apakah Anda benar-benar yakin ingin menghapus <span className="font-bold text-rose-600">{selectedEntryIds.length} entri jurnal</span> yang terpilih secara permanen dari database keuangan? 
+                </p>
+
+                <div className="bg-rose-50/10 border border-rose-100 p-4 rounded-2xl max-h-48 overflow-y-auto space-y-2">
+                  <p className="text-[10px] font-bold text-rose-550 uppercase tracking-widest mb-1">Daftar Jurnal Terpilih</p>
+                  {selectedEntryIds.map(id => {
+                    const ent = entries.find(e => e.id === id);
+                    if (!ent) return null;
+                    return (
+                      <div key={id} className="text-xs border-b border-slate-100 pb-1.5 last:border-0 last:pb-0">
+                        <span className="font-semibold text-slate-800">{ent.description}</span>
+                        {ent.reference && <span className="text-slate-500 text-[11px]"> ({ent.reference})</span>}
+                        <div className="text-[10px] text-slate-400 mt-0.5">
+                          Tanggal: {format(ent.date.toDate(), 'dd/MM/yyyy')}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-4 border-t border-natural-border flex justify-end gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBulkDeleteConfirmOpen(false);
+                    }}
+                    disabled={isBulkDeleting}
+                    className="px-5 py-2.5 border border-natural-border rounded-full text-xs font-bold uppercase tracking-wider text-slate-550 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBulkDeleteConfirm}
+                    disabled={isBulkDeleting}
+                    className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 disabled:bg-rose-400 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 shadow-md shadow-rose-600/10 transition-colors"
+                  >
+                    {isBulkDeleting ? 'Menghapus...' : 'Hapus Semua Terpilih'}
                   </button>
                 </div>
               </div>
