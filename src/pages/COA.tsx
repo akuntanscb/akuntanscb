@@ -1,10 +1,40 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Plus, Search, Tag, Wallet, Edit2, Trash2, X, Save, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { 
+  Plus, 
+  Search, 
+  Tag, 
+  Wallet, 
+  Edit2, 
+  Trash2, 
+  X, 
+  Save, 
+  AlertCircle, 
+  CheckCircle2,
+  Download,
+  Upload,
+  FileSpreadsheet,
+  FileJson,
+  FileUp,
+  FileDown,
+  Info 
+} from 'lucide-react';
 import { getAccounts, createAccount, updateAccount, deleteAccount } from '../services/accountService';
 import { getJournalEntries } from '../services/journalService';
 import { Account, AccountCategory } from '../types';
 import { formatRupiah, cn } from '../lib/utils';
+
+interface ParsedAccount {
+  code: string;
+  name: string;
+  category: AccountCategory;
+  subCategory: string;
+  initialBalance: number;
+  action: 'create' | 'update';
+  existingId?: string;
+  isValid: boolean;
+  errors: string[];
+}
 
 export default function COA() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -23,6 +53,15 @@ export default function COA() {
   const [initialBalance, setInitialBalance] = useState<string>('0');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Import & Export States
+  const [showImportExport, setShowImportExport] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [parsedAccounts, setParsedAccounts] = useState<ParsedAccount[]>([]);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  const [importSuccessMsg, setImportSuccessMsg] = useState('');
+  const [importErrorMsg, setImportErrorMsg] = useState('');
 
   // Delete Confirmation States
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -166,6 +205,352 @@ export default function COA() {
     }
   };
 
+  // ==========================================
+  // EXPORT & IMPORT ENGINE ROUTINES (COA)
+  // ==========================================
+
+  const parseCSV = (text: string): string[][] => {
+    const result: string[][] = [];
+    const lines = text.split(/\r?\n/);
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const row: string[] = [];
+      let insideQuotes = false;
+      let currentVal = '';
+      
+      for (let c = 0; c < line.length; c++) {
+        const char = line[c];
+        
+        if (char === '"') {
+          if (insideQuotes && line[c + 1] === '"') {
+            currentVal += '"';
+            c++;
+          } else {
+            insideQuotes = !insideQuotes;
+          }
+        } else if (char === ',' && !insideQuotes) {
+          row.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      row.push(currentVal.trim());
+      result.push(row);
+    }
+    return result;
+  };
+
+  const handleExportCSV = (all: boolean) => {
+    const dataToExport = all ? accounts : filteredAccounts;
+    if (dataToExport.length === 0) {
+      alert("Tidak ada data bagan akun untuk diekspor.");
+      return;
+    }
+    
+    const headers = ["Kode Akun", "Nama Akun", "Kategori Utama", "Sub-Kategori", "Saldo Awal"];
+    const rows = [headers];
+    
+    dataToExport.forEach(acc => {
+      rows.push([
+        acc.code,
+        acc.name,
+        acc.category,
+        acc.subCategory || '',
+        (acc.initialBalance || 0).toString()
+      ]);
+    });
+    
+    const csvContent = "\uFEFF" + rows.map(r => r.map(val => {
+      const clean = (val || '').replace(/"/g, '""');
+      return `"${clean}"`;
+    }).join(",")).join("\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ekspor_COA_${all ? 'Semua' : 'Terfilter'}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportJSON = (all: boolean) => {
+    const dataToExport = all ? accounts : filteredAccounts;
+    if (dataToExport.length === 0) {
+      alert("Tidak ada data bagan akun untuk diekspor.");
+      return;
+    }
+
+    const serializableData = dataToExport.map(acc => ({
+      code: acc.code,
+      name: acc.name,
+      category: acc.category,
+      subCategory: acc.subCategory || '',
+      initialBalance: acc.initialBalance || 0
+    }));
+
+    const jsonContent = JSON.stringify(serializableData, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ekspor_COA_${all ? 'Semua' : 'Terfilter'}_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = ["Kode Akun", "Nama Akun", "Kategori Utama", "Sub-Kategori", "Saldo Awal"];
+    const rows = [
+      headers,
+      ["1104", "Bank Indonesia (Syariah)", "Aset", "Kas & Bank", "5000000"],
+      ["4104", "Pendapatan SBN Sekolah", "Pendapatan", "Pendapatan Lain", "0"],
+      ["5302", "Beban Internet & Wifi", "Beban", "Beban Operasional", "150000"]
+    ];
+
+    const csvContent = "\uFEFF" + rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "bagan_akun_template.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const processFile = (file: File) => {
+    setImportSuccessMsg('');
+    setImportErrorMsg('');
+    setParsedAccounts([]);
+    const reader = new FileReader();
+    
+    const isCSV = file.name.endsWith('.csv');
+    const isJSON = file.name.endsWith('.json');
+    
+    if (!isCSV && !isJSON) {
+      setImportErrorMsg('Format file tidak didukung. Harap unggah file .csv atau .json.');
+      return;
+    }
+    
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const tempParsedList: ParsedAccount[] = [];
+        
+        if (isCSV) {
+          const csvRows = parseCSV(text);
+          if (csvRows.length < 2) {
+            setImportErrorMsg('File CSV kosong atau tidak memiliki data.');
+            return;
+          }
+          
+          const headers = csvRows[0].map(h => h.toLowerCase().replace(/[\ufeff\s_\-]/g, ''));
+          const idxCode = headers.findIndex(h => h.includes('kode') || h.includes('code'));
+          const idxName = headers.findIndex(h => h.includes('nama') || h.includes('name'));
+          const idxCat = headers.findIndex(h => h.includes('kat') || h.includes('cat'));
+          const idxSub = headers.findIndex(h => h.includes('sub'));
+          const idxBal = headers.findIndex(h => h.includes('saldo') || h.includes('balance') || h.includes('awal'));
+          
+          if (idxCode === -1 || idxName === -1 || idxCat === -1) {
+            setImportErrorMsg("Struktur kolom CSV salah. Pastikan memiliki kolom wajib: Kode Akun, Nama Akun, Kategori Utama.");
+            return;
+          }
+          
+          for (let i = 1; i < csvRows.length; i++) {
+            const row = csvRows[i];
+            if (row.length === 0 || row.join('').trim() === '') continue;
+            
+            const codeRaw = row[idxCode];
+            const nameRaw = row[idxName];
+            const catRaw = row[idxCat];
+            const subCategory = idxSub !== -1 ? (row[idxSub] || '') : '';
+            const balRaw = idxBal !== -1 ? row[idxBal] : '0';
+            const initialBalance = parseFloat(balRaw?.replace(/[^0-9.\-]/g, '') || '0') || 0;
+            
+            // Normalize Category
+            let category: AccountCategory = 'Aset';
+            const catLower = catRaw?.toLowerCase() || '';
+            if (catLower.includes('liab') || catLower.includes('hutang') || catLower.includes('kewajiban')) {
+              category = 'Liabilitas';
+            } else if (catLower.includes('ekui') || catLower.includes('modal') || catLower.includes('neto')) {
+              category = 'Ekuitas';
+            } else if (catLower.includes('pendap') || catLower.includes('terima') || catLower.includes('revenue')) {
+              category = 'Pendapatan';
+            } else if (catLower.includes('beb') || catLower.includes('belanja') || catLower.includes('biaya') || catLower.includes('expense')) {
+              category = 'Beban';
+            } else {
+              category = 'Aset';
+            }
+
+            tempParsedList.push({
+              code: codeRaw?.trim() || '',
+              name: nameRaw?.trim() || '',
+              category,
+              subCategory: subCategory?.trim() || '',
+              initialBalance,
+              action: 'create',
+              isValid: true,
+              errors: []
+            });
+          }
+        } else if (isJSON) {
+          const parsedArray = JSON.parse(text);
+          const arrayToProcess = Array.isArray(parsedArray) ? parsedArray : [parsedArray];
+          
+          arrayToProcess.forEach((item: any) => {
+            let category: AccountCategory = 'Aset';
+            const catLower = String(item.category || item.kategori || '').toLowerCase();
+            if (catLower.includes('liab') || catLower.includes('hutang') || catLower.includes('kewajiban')) {
+              category = 'Liabilitas';
+            } else if (catLower.includes('ekui') || catLower.includes('modal') || catLower.includes('neto')) {
+              category = 'Ekuitas';
+            } else if (catLower.includes('pendap') || catLower.includes('terima') || catLower.includes('revenue')) {
+              category = 'Pendapatan';
+            } else if (catLower.includes('beb') || catLower.includes('belanja') || catLower.includes('biaya') || catLower.includes('expense')) {
+              category = 'Beban';
+            }
+
+            tempParsedList.push({
+              code: String(item.code || item.kodeAkun || item.kode || '').trim(),
+              name: String(item.name || item.nameAkun || item.nama || item.namaAkun || '').trim(),
+              category,
+              subCategory: String(item.subCategory || item.subKategori || '').trim(),
+              initialBalance: Number(item.initialBalance || item.saldoAwal || 0),
+              action: 'create',
+              isValid: true,
+              errors: []
+            });
+          });
+        }
+        
+        // Validate
+        tempParsedList.forEach(acc => {
+          const errors: string[] = [];
+          
+          if (!acc.code) {
+            errors.push("Kode akun kosong.");
+          } else if (!/^[a-zA-Z0-9_\-]+$/.test(acc.code)) {
+            errors.push(`Kode akun '${acc.code}' tidak valid (hanya boleh huruf, angka, strip, atau underscore).`);
+          }
+          
+          if (!acc.name) {
+            errors.push("Nama akun kosong.");
+          }
+
+          // Determine Action: Create or Update based on currently registered Accounts
+          const existing = accounts.find(a => a.code.toLowerCase() === acc.code.toLowerCase());
+          if (existing) {
+            acc.action = 'update';
+            acc.existingId = existing.id;
+          } else {
+            acc.action = 'create';
+          }
+          
+          if (errors.length > 0) {
+            acc.isValid = false;
+            acc.errors = errors;
+          }
+        });
+        
+        setParsedAccounts(tempParsedList);
+        if (tempParsedList.length === 0) {
+          setImportErrorMsg('Tidak ada data akun yang dapat dibaca dlm file.');
+        } else {
+          const invalidCount = tempParsedList.filter(e => !e.isValid).length;
+          if (invalidCount > 0) {
+            setImportErrorMsg(`Ditemukan ${invalidCount} baris bermasalah dari total ${tempParsedList.length} entri bagan akun.`);
+          }
+        }
+      } catch (err: any) {
+        console.error(err);
+        setImportErrorMsg('Gagal memproses file. Pastikan format tabel/struktur data valid.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmImport = async () => {
+    const validOnes = parsedAccounts.filter(e => e.isValid);
+    if (validOnes.length === 0) {
+      alert("Tidak ada data bagan akun valid untuk diimpor.");
+      return;
+    }
+    
+    setImportLoading(true);
+    setImportProgress({ current: 0, total: validOnes.length });
+    
+    let processedCount = 0;
+    try {
+      for (let i = 0; i < validOnes.length; i++) {
+        const item = validOnes[i];
+        
+        const accountData = {
+          code: item.code,
+          name: item.name,
+          category: item.category,
+          subCategory: item.subCategory,
+          initialBalance: item.initialBalance,
+          isDeletable: true
+        };
+
+        if (item.action === 'update' && item.existingId) {
+          // Update / Sync
+          await updateAccount(item.existingId, accountData);
+        } else {
+          // Create new
+          await createAccount(accountData);
+        }
+        
+        processedCount++;
+        setImportProgress({ current: processedCount, total: validOnes.length });
+      }
+      
+      setImportSuccessMsg(`Sukses! Berhasil mengimpor/singkronisasi ${processedCount} bagan akun secara langsung ke database.`);
+      setParsedAccounts([]);
+      fetchAccounts();
+      setTimeout(() => {
+        setImportSuccessMsg('');
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      setImportErrorMsg(`Gagal memproses impor bagan akun: ${err.message || 'Error internal'}`);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   const handleDeleteConfirm = async () => {
     if (!accountToDelete) return;
     setIsDeletingLoading(true);
@@ -202,18 +587,278 @@ export default function COA() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Bagan Akun (COA)</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Struktur database akun keuangan sekolah</p>
         </div>
-        <button 
-          onClick={handleOpenAdd}
-          className="bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center gap-2 transition-all font-semibold shadow-sm text-sm"
-        >
-          <Plus className="w-4 h-4" /> Tambah Akun
-        </button>
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          <button
+            onClick={() => {
+              setShowImportExport(!showImportExport);
+            }}
+            className={cn(
+              "px-5 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm border text-sm w-full sm:w-auto cursor-pointer select-none",
+              showImportExport 
+                ? "bg-amber-50 text-amber-700 border-amber-200" 
+                : "bg-white border-natural-border text-slate-700 hover:bg-slate-50"
+            )}
+          >
+            <FileSpreadsheet className="w-4 h-4 shrink-0" />
+            Ekspor & Impor
+          </button>
+          
+          <button 
+            onClick={handleOpenAdd}
+            className="px-6 py-2.5 bg-natural-primary text-white hover:opacity-90 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none"
+          >
+            <Plus className="w-4 h-4" /> 
+            Tambah Akun
+          </button>
+        </div>
       </div>
+
+      {/* Import & Export Panel */}
+      <AnimatePresence>
+        {showImportExport && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Export Panel */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                    <FileDown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif italic font-bold text-slate-850 text-base">Ekspor Bagan Akun</h3>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Tarik bagan akun dalam format file spreadsheet (.csv) atau database (.json)</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Ekspor daftar bagan akun Anda ke dalam format CSV untuk dianalisis di Excel atau diolah ke sistem laporan keuangan lainnya.
+                </p>
+
+                <div className="bg-white/80 border border-slate-100 p-4 rounded-2xl flex flex-col sm:flex-row gap-4 items-center justify-between">
+                  {/* Status counts */}
+                  <div className="text-xs space-y-1 w-full sm:w-auto text-left">
+                    <div className="flex justify-between sm:justify-start gap-3">
+                      <span className="text-slate-400">Total Akun Terdaftar:</span>
+                      <span className="font-bold text-slate-700 font-mono">{accounts.length} akun</span>
+                    </div>
+                    <div className="flex justify-between sm:justify-start gap-3">
+                      <span className="text-slate-400">Terfilter di layar sekarang:</span>
+                      <span className="font-bold text-natural-primary font-mono">{filteredAccounts.length} akun</span>
+                    </div>
+                  </div>
+
+                  {/* Buttons group */}
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleExportCSV(true)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 font-semibold text-white rounded-xl shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> CSV (Semua)
+                      </button>
+                      <button
+                        onClick={() => handleExportCSV(false)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 font-semibold text-emerald-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        CSV (Terfilter)
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleExportJSON(true)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-800 hover:bg-slate-900 font-semibold text-white rounded-xl shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        <FileJson className="w-3.5 h-3.5" /> JSON (Semua)
+                      </button>
+                      <button
+                        onClick={() => handleExportJSON(false)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-50 border border-slate-205 hover:bg-slate-100 font-semibold text-slate-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        JSON (Terfilter)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Import Panel */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                      <FileUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-serif italic font-bold text-slate-855 text-base">Impor Bagan Akun</h3>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi bagan akun instan</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="text-[10px] text-indigo-750 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
+                    title="Unduh format tabel dalam Excel/CSV"
+                  >
+                    <Download className="w-3 h-3" /> Unduh Template CSV
+                  </button>
+                </div>
+
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={cn(
+                    "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
+                    dragOver 
+                      ? "border-indigo-505 bg-indigo-50/50" 
+                      : "border-slate-250 bg-white hover:border-slate-350"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    id="import-coa-file-selector"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title=""
+                  />
+                  <Upload className="w-8 h-8 text-slate-400 shrink-0" />
+                  <div className="space-y-0.5 select-none">
+                    <p className="text-xs font-semibold text-slate-700">Tarik & Lepaskan File (.csv atau .json)</p>
+                    <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
+                  </div>
+                </div>
+
+                {importSuccessMsg && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{importSuccessMsg}</span>
+                  </div>
+                )}
+
+                {importErrorMsg && (
+                  <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="flex-1">{importErrorMsg}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Parsing Review Panel / Importer Preview Table */}
+            {parsedAccounts.length > 0 && (
+              <div className="mt-4 bg-white border border-natural-border rounded-3xl p-6 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
+                  <div>
+                    <h4 className="font-serif italic font-bold text-slate-855 text-base">Tinjau Validasi Transaksi Impor Bagan Akun</h4>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono font-semibold">
+                      Terbaca: <b className="text-slate-800 font-bold font-mono">{parsedAccounts.length}</b> Akun • Baru (Tambah): <b className="text-emerald-700 font-bold font-mono">{parsedAccounts.filter(p => p.isValid && p.action === 'create').length}</b> • Sinkron (Update): <b className="text-blue-700 font-bold font-mono">{parsedAccounts.filter(p => p.isValid && p.action === 'update').length}</b> • Bermasalah: <b className="text-rose-600 font-bold font-mono">{parsedAccounts.filter(p => !p.isValid).length}</b>
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <button
+                      onClick={() => setParsedAccounts([])}
+                      className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-50 border border-slate-205 hover:bg-slate-100 text-slate-600 font-semibold rounded-lg transition-colors cursor-pointer text-center"
+                    >
+                      Bersihkan
+                    </button>
+                    <button
+                      onClick={handleConfirmImport}
+                      disabled={importLoading || parsedAccounts.filter(p => p.isValid).length === 0}
+                      className="flex-1 sm:flex-none px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      {importLoading ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Menyimpan ({importProgress.current}/{importProgress.total})...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Proses Impor {parsedAccounts.filter(p => p.isValid).length} Entri Valid</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                  {parsedAccounts.map((pa, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50/30 flex flex-col md:flex-row justify-between items-start gap-4 text-xs font-sans">
+                      <div className="space-y-1 flex-1 text-left">
+                        <div className="flex items-center gap-2">
+                          {!pa.isValid ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 animate-pulse" title="Perlu Koreksi" />
+                          ) : pa.action === 'update' ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" title="Sinkron / Update Akun Terdaftar" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Akun Baru" />
+                          )}
+                          <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
+                            {pa.code || 'Tanpa Kode'}
+                          </span>
+                          <span className="font-bold text-slate-800 text-sm">{pa.name || 'Nama Kosong'}</span>
+                          
+                          <span className={cn(
+                            "text-[9px] font-bold uppercase px-1.5 py-0.2 rounded border shrink-0",
+                            pa.category === 'Aset' ? 'bg-blue-50/50 border-blue-200 text-blue-700' :
+                            pa.category === 'Liabilitas' ? 'bg-amber-50/50 border-amber-200 text-amber-700' :
+                            pa.category === 'Ekuitas' ? 'bg-purple-50/50 border-purple-200 text-purple-700' :
+                            pa.category === 'Pendapatan' ? 'bg-emerald-50/50 border-emerald-200 text-emerald-700' :
+                            'bg-rose-50/50 border-rose-200 text-rose-700'
+                          )}>
+                            {pa.category}
+                          </span>
+                        </div>
+                        
+                        <div className="text-[10px] text-slate-400">
+                          Sub-Kategori: <strong className="text-slate-600">{pa.subCategory || '-'}</strong> • Saldo Awal: <strong className="text-slate-600">{formatRupiah(pa.initialBalance)}</strong>
+                        </div>
+                        
+                        {/* Errors report */}
+                        {!pa.isValid && (
+                          <div className="space-y-1 mt-1 bg-rose-50 border border-rose-100 text-rose-700 p-2.5 rounded-xl text-[10px] font-medium leading-relaxed max-w-lg">
+                            {pa.errors.map((err, eIdx) => (
+                              <div key={eIdx} className="flex gap-1 items-start">
+                                <span className="text-rose-500 shrink-0">•</span>
+                                <span>{err}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action plan summary */}
+                      <div className="text-right shrink-0">
+                        {pa.isValid && (
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-mono tracking-wider border",
+                            pa.action === 'update' 
+                              ? "bg-blue-50 text-blue-700 border-blue-200" 
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}>
+                            {pa.action === 'update' ? 'Sinkron/Update' : 'Akun Baru'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="bg-white p-4 rounded-2xl border border-natural-border shadow-sm flex items-center gap-3">
         <Search className="w-5 h-5 text-gray-400 ml-2" />
