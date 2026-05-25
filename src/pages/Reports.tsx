@@ -5,6 +5,62 @@ import { getFinancialReports } from '../services/reportService';
 import { getAccounts, updateAccount } from '../services/accountService';
 import { Account, AccountCategory } from '../types';
 import { formatRupiah, cn } from '../lib/utils';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+// Helper to convert modern oklch() color syntax to universally supported hsla() format
+function oklchToHsl(oklchStr: string): string {
+  const match = oklchStr.match(/oklch\(([^)]+)\)/);
+  if (!match) return oklchStr;
+  
+  const content = match[1].trim();
+  // Standardize delimiters by replacing "/" with " " and removing commas
+  const cleanContent = content.replace(/\//g, ' ').replace(/,/g, ' ');
+  const parts = cleanContent.split(/\s+/).filter(Boolean);
+  
+  if (parts.length < 3) return oklchStr;
+  
+  const lVal = parts[0];
+  const cVal = parts[1];
+  const hVal = parts[2];
+  const aVal = parts[3] || '1';
+  
+  // Parse Lightness (L)
+  let l = parseFloat(lVal);
+  if (lVal.includes('%')) {
+    l = parseFloat(lVal) / 100;
+  }
+  
+  // Parse Chroma (C)
+  let c = parseFloat(cVal);
+  if (cVal.includes('%')) {
+    c = parseFloat(cVal) / 100;
+  }
+  
+  // Parse Hue (H)
+  let h = parseFloat(hVal);
+  if (hVal.includes('deg')) {
+    h = parseFloat(hVal);
+  } else if (hVal.includes('rad')) {
+    h = (parseFloat(hVal) * 180) / Math.PI;
+  } else if (hVal.includes('turn')) {
+    h = parseFloat(hVal) * 360;
+  }
+  
+  if (isNaN(l) || isNaN(c) || isNaN(h)) return 'rgba(255, 255, 255, 1)';
+  
+  // Convert OKLCH to approximate HSL:
+  // Lightness translates almost directly (e.g. L = 0.9 -> 90%)
+  const hslLightness = Math.round(l * 100);
+  
+  // Saturation can be approximated from Chroma.
+  // Maximum Chroma in OKLCH is around 0.4 but typically around 0.1-0.2.
+  // We scale it: Saturation = Math.min(100, Math.round(c * 250))
+  const hslSaturation = Math.min(100, Math.round(c * 250));
+  const hslHue = Math.round(h % 360);
+  
+  return `hsla(${hslHue}, ${hslSaturation}%, ${hslLightness}%, ${aVal})`;
+}
 
 export default function Reports() {
   const [data, setData] = useState<any>(null);
@@ -55,6 +111,133 @@ export default function Reports() {
       return `(${formatRupiah(Math.abs(val))})`;
     }
     return formatRupiah(val);
+  };
+
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('report-print-area');
+    if (!element) return;
+    
+    setPdfLoading(true);
+    // Introduce a short delay so React can toggle hidden elements before taking screen snapshot
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    
+    const stylesheetBackups: { node: HTMLElement; originalDisabled: boolean }[] = [];
+    let tempStyleEl: HTMLStyleElement | null = null;
+    
+    try {
+      // 1. Gather all CSS rules from existing stylesheets and convert oklch to hsla
+      let combinedCss = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        const node = sheet.ownerNode as HTMLElement;
+        if (!node) continue;
+        
+        let sheetCss = '';
+        if (node instanceof HTMLStyleElement) {
+          sheetCss = node.textContent || '';
+        } else {
+          try {
+            const rules = Array.from(sheet.cssRules || sheet.rules);
+            sheetCss = rules.map(rule => rule.cssText).join('\n');
+          } catch (e) {
+            console.warn("Could not read stylesheet rules. Falling back:", e);
+          }
+        }
+        
+        if (sheetCss) {
+          combinedCss += sheetCss + '\n';
+          stylesheetBackups.push({
+            node,
+            originalDisabled: (node as any).disabled || false
+          });
+          // Temporarily disable original stylesheets so html2canvas doesn't try to parse them
+          (node as any).disabled = true;
+        }
+      }
+
+      // 2. Perform the regex replacement to convert all oklch(...) occurrences inside CSS
+      const replacedCss = combinedCss.replace(/oklch\(([^)]+)\)/g, (match) => {
+        return oklchToHsl(match);
+      });
+
+      // 3. Inject the sanitized style sheet
+      tempStyleEl = document.createElement('style');
+      tempStyleEl.id = 'temp-pdf-style-sanitized';
+      tempStyleEl.textContent = replacedCss;
+      document.head.appendChild(tempStyleEl);
+
+      // Temporarily remove borders and shadows for a pristine document feel
+      const originalShadow = element.style.boxShadow;
+      const originalBorder = element.style.border;
+      const originalRadius = element.style.borderRadius;
+      
+      element.style.boxShadow = 'none';
+      element.style.border = 'none';
+      element.style.borderRadius = '0px';
+
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x scale for sharp text and beautiful graphics
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#ffffff',
+        windowWidth: 1200 // Lock width for desktop-style rendering columns
+      });
+      
+      // Restore styles
+      element.style.boxShadow = originalShadow;
+      element.style.border = originalBorder;
+      element.style.borderRadius = originalRadius;
+
+      const imgData = canvas.toDataURL('image/png');
+      
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+      
+      const pdfWidth = 210;
+      const pdfHeight = 297;
+      const margin = 12; // 12mm page margin
+      const contentWidth = pdfWidth - (margin * 2); // 186mm
+      const pageViewHeight = pdfHeight - (margin * 2); // 273mm
+      
+      const imgHeight = (canvas.height * contentWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = margin;
+      
+      // First page
+      pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
+      heightLeft -= pageViewHeight;
+      
+      // Multi-page layout
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, contentWidth, imgHeight);
+        heightLeft -= pageViewHeight;
+      }
+      
+      let fileName = 'Laporan_Keuangan';
+      if (activeTab === 'neraca') fileName = 'Laporan_Neraca';
+      else if (activeTab === 'aktivitas') fileName = 'Laporan_Aktivitas';
+      else if (activeTab === 'arusKas') fileName = 'Laporan_Arus_Kas';
+      else if (activeTab === 'calk') fileName = 'Laporan_CALK';
+      
+      pdf.save(`${fileName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (error) {
+      console.error('Gagal merender PDF:', error);
+    } finally {
+      // 4. Always tear down the temporary style sheet and restore the original sheets
+      if (tempStyleEl && tempStyleEl.parentNode) {
+        tempStyleEl.parentNode.removeChild(tempStyleEl);
+      }
+      for (const backup of stylesheetBackups) {
+        (backup.node as any).disabled = backup.originalDisabled;
+      }
+      setPdfLoading(false);
+    }
   };
 
   const handleDownloadActiveReport = () => {
@@ -274,7 +457,7 @@ export default function Reports() {
           <h1 className="text-3xl font-serif italic text-natural-primary">Laporan Keuangan</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Laporan otomatis berbasis posting jurnal</p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-3 items-center">
           <button
             onClick={openLayoutEditor}
             className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none"
@@ -295,6 +478,29 @@ export default function Reports() {
             title="Unduh Laporan Aktif sebagai Text"
           >
             <Download className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={handleDownloadPDF}
+            disabled={pdfLoading}
+            className={cn(
+              "px-4 py-2.5 rounded-xl transition-all font-bold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none border border-transparent",
+              pdfLoading 
+                ? "bg-slate-100 text-slate-450 cursor-not-allowed" 
+                : "bg-red-650 hover:bg-red-700 text-white bg-red-600"
+            )}
+            title="Unduh Laporan Aktif Berformat PDF"
+          >
+            {pdfLoading ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                <span>Memproses PDF...</span>
+              </>
+            ) : (
+              <>
+                <span className="bg-white/20 p-0.5 rounded text-[10px] font-extrabold uppercase tracking-tight px-1 mr-0.5">PDF</span>
+                <span>Unduh PDF</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -342,7 +548,7 @@ export default function Reports() {
         </button>
       </div>
 
-      <div className="bg-white rounded-[2rem] border border-natural-border shadow-sm p-12 print:p-0 print:border-none print:shadow-none">
+      <div id="report-print-area" className="bg-white rounded-[2rem] border border-natural-border shadow-sm p-12 print:p-0 print:border-none print:shadow-none">
         <div className="text-center mb-16 space-y-2">
           <h2 className="text-2xl font-serif text-natural-primary uppercase tracking-tight">Sekolah Cendekia Baznas</h2>
           <p className="text-gray-400 uppercase tracking-[0.2em] text-xs font-bold">
@@ -596,26 +802,28 @@ export default function Reports() {
                 </p>
                 
                 {/* School Administrative Editable Inputs */}
-                <div className="bg-slate-550/5 p-5 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 print:border-none print:bg-transparent print:p-0">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Kepala Sekolah (SCB)</label>
-                    <input 
-                      type="text" 
-                      value={calkKepalaSekolah}
-                      onChange={(e) => setCalkKepalaSekolah(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
-                    />
+                {!pdfLoading && (
+                  <div className="bg-slate-550/5 p-5 rounded-2xl border border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 mt-2 print:border-none print:bg-transparent print:p-0">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Kepala Sekolah (SCB)</label>
+                      <input 
+                        type="text" 
+                        value={calkKepalaSekolah}
+                        onChange={(e) => setCalkKepalaSekolah(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Bendahara / PJ Keuangan</label>
+                      <input 
+                        type="text" 
+                        value={calkBendahara}
+                        onChange={(e) => setCalkBendahara(e.target.value)}
+                        className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
+                      />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Bendahara / PJ Keuangan</label>
-                    <input 
-                      type="text" 
-                      value={calkBendahara}
-                      onChange={(e) => setCalkBendahara(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg text-slate-700 font-sans focus:outline-none focus:border-indigo-500 print:border-none print:px-0"
-                    />
-                  </div>
-                </div>
+                )}
               </div>
             </div>
 
@@ -724,27 +932,37 @@ export default function Reports() {
                 <span>BAB IV. KETERANGAN & CATATAN KHUSUS AKTIVITAS</span>
               </h3>
               <div className="text-sm font-sans space-y-3">
-                <p className="text-xs text-slate-500 leading-relaxed italic print:hidden">
-                  Gunakan kolom editor di bawah ini untuk menambahkan narasi penjelas khusus (misalnya: rincian utang piutang santri, hambatan operasional, catatan hibah) yang akan langsung ikut terekam saat dokumen dicetak atau diprinter:
-                </p>
+                {!pdfLoading && (
+                  <p className="text-xs text-slate-500 leading-relaxed italic print:hidden">
+                    Gunakan kolom editor di bawah ini untuk menambahkan narasi penjelas khusus (misalnya: rincian utang piutang santri, hambatan operasional, catatan hibah) yang akan langsung ikut terekam saat dokumen dicetak atau diprinter:
+                  </p>
+                )}
                 
-                <textarea 
-                  rows={8}
-                  value={calkCatatanTambahan}
-                  onChange={(e) => setCalkCatatanTambahan(e.target.value)}
-                  placeholder="Ketik catatan tambahan laporan di sini..."
-                  className="w-full p-4 text-xs font-sans text-slate-700 bg-white border border-slate-300 rounded-2xl focus:outline-none focus:border-indigo-500 shadow-inner leading-relaxed print:border-none print:bg-transparent print:p-0 print:shadow-none"
-                />
+                {pdfLoading ? (
+                  <div className="w-full text-xs font-sans text-slate-700 leading-relaxed whitespace-pre-wrap py-2 min-h-[120px]">
+                    {calkCatatanTambahan}
+                  </div>
+                ) : (
+                  <textarea 
+                    rows={8}
+                    value={calkCatatanTambahan}
+                    onChange={(e) => setCalkCatatanTambahan(e.target.value)}
+                    placeholder="Ketik catatan tambahan laporan di sini..."
+                    className="w-full p-4 text-xs font-sans text-slate-700 bg-white border border-slate-300 rounded-2xl focus:outline-none focus:border-indigo-500 shadow-inner leading-relaxed print:border-none print:bg-transparent print:p-0 print:shadow-none"
+                  />
+                )}
 
-                <div className="flex justify-end pt-1 print:hidden">
-                  <button
-                    type="button"
-                    onClick={handleSaveCalk}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-md flex items-center gap-1.5 transition-colors cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" /> Simpan Narasi Catatan
-                  </button>
-                </div>
+                {!pdfLoading && (
+                  <div className="flex justify-end pt-1 print:hidden">
+                    <button
+                      type="button"
+                      onClick={handleSaveCalk}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold uppercase tracking-wider rounded-full shadow-md flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" /> Simpan Narasi Catatan
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
 

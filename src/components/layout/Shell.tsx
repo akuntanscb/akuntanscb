@@ -30,6 +30,8 @@ interface ShellProps {
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
   const location = useLocation();
   const { settings, t } = useSettings();
 
@@ -39,9 +41,40 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     });
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (isLoggingIn) return;
+    setIsLoggingIn(true);
+    setAuthError(null);
     const provider = new GoogleAuthProvider();
-    signInWithPopup(auth, provider);
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      console.log('Firebase Auth Error Captured:', error);
+      if (error && (error.code === 'auth/cancelled-popup-request' || error.message?.includes('cancelled-popup-request'))) {
+        // Ignored gracefully since it is dual request
+        console.warn('Login popup request was superseded or cancelled.');
+      } else if (error && (error.code === 'auth/popup-closed-by-user' || error.message?.includes('popup-closed-by-user'))) {
+        setAuthError(
+          settings.language === 'en' 
+            ? 'Sign-in window was closed before completion. Please try again.' 
+            : (settings.language === 'ar' 
+              ? 'تم إغلاق نافذة تسجيل الدخول قبل الإكمال. يرجى المحاولة مرة أخرى.' 
+              : 'Jendela masuk ditutup sebelum selesai. Silakan coba lagi.')
+        );
+      } else if (error && (error.code === 'auth/popup-blocked' || error.message?.includes('popup-blocked'))) {
+        setAuthError(
+          settings.language === 'en' 
+            ? 'Sign-in popup was blocked by your browser. Please allow popups for this site.' 
+            : (settings.language === 'ar' 
+              ? 'تم حظر نافذة تسجيل الدخول المنبثقة بواسطة متصفحك. يرجى السماح بالنوافذ المنبثقة.' 
+              : 'Popup masuk diblokir oleh browser Anda. Silakan izinkan popup untuk situs ini.')
+        );
+      } else {
+        setAuthError(error.message || String(error));
+      }
+    } finally {
+      setIsLoggingIn(false);
+    }
   };
 
   const handleLogout = () => {
@@ -85,12 +118,30 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           </div>
           <h1 className="text-2xl font-bold text-slate-900 mb-2 font-serif italic text-emerald-950">{settings.systemName}</h1>
           <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">{settings.systemSubName}</p>
+
+          {authError && (
+            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs text-center font-semibold leading-relaxed">
+              {authError}
+            </div>
+          )}
+
           <button 
             onClick={handleLogin}
-            className="w-full text-white font-semibold py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-md hover:brightness-110 active:scale-[0.98]"
-            style={{ backgroundColor: 'var(--color-natural-primary)' }}
+            disabled={isLoggingIn}
+            className={cn(
+              "w-full text-white font-semibold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-md active:scale-[0.98]",
+              isLoggingIn ? "bg-slate-350 cursor-not-allowed opacity-60" : "hover:brightness-110"
+            )}
+            style={{ backgroundColor: isLoggingIn ? '#94a3b8' : 'var(--color-natural-primary)' }}
           >
-            {settings.language === 'en' ? 'Sign In with Google' : (settings.language === 'ar' ? 'تسجيل الدخول باستخدام جوجل' : 'Masuk dengan Google')}
+            {isLoggingIn ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>{settings.language === 'en' ? 'Connecting...' : (settings.language === 'ar' ? 'جاري الاتصال...' : 'Menghubungkan...')}</span>
+              </>
+            ) : (
+              settings.language === 'en' ? 'Sign In with Google' : (settings.language === 'ar' ? 'تسجيل الدخول باستخدام جوجل' : 'Masuk dengan Google')
+            )}
           </button>
         </motion.div>
       </div>
