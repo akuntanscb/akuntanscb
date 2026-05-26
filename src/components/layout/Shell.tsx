@@ -153,7 +153,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
       {/* Sidebar */}
       <aside 
         className={cn(
-          "bg-natural-primary flex flex-col text-white shadow-2xl transition-all duration-300 z-20 shrink-0",
+          "bg-natural-primary flex flex-col text-white shadow-2xl transition-all duration-300 z-20 shrink-0 print:hidden",
           isSidebarOpen ? "w-64" : "w-19"
         )}
       >
@@ -229,7 +229,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative" style={{ textAlign: settings.language === 'ar' ? 'right' : 'left' }}>
-        <header className="h-16 bg-white border-b border-natural-border flex items-center justify-between px-6 shrink-0">
+        <header className="h-16 bg-white border-b border-natural-border flex items-center justify-between px-6 shrink-0 print:hidden">
           <div className="flex items-center gap-3">
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -269,7 +269,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </section>
 
         {/* Footer */}
-        <footer className="px-6 py-3 bg-white/50 border-t border-natural-border flex justify-between items-center text-[9px] shrink-0 font-medium">
+        <footer className="px-6 py-3 bg-white/50 border-t border-natural-border flex justify-between items-center text-[9px] shrink-0 font-medium print:hidden">
           <p className="text-gray-400">
             {settings.language === 'en' ? 'Accounting Support SAK ETAP & PSAK 109 • Nonprofit School Ledger System' : (settings.language === 'ar' ? 'دعم المحاسبة معايير SAK ETAP و PSAK 109 • النظام المالي المدرسي' : 'Bantuan Akuntansi SAK ETAP & PSAK 109 • Sistem Informasi Sekolah')}
           </p>

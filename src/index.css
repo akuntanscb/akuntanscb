@@ -18,3 +18,57 @@
   }
 }
 
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  main, section, header, footer, aside {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  /* Optimize print container */
+  #report-print-area {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  /* Adapt responsive layouts */
+  .grid-cols-2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  .grid {
+    display: grid !important;
+  }
+
+  /* Background graphics compatibility fallback colors */
+  .bg-emerald-50, .bg-rose-50, .bg-indigo-50, .bg-slate-100 {
+    background-color: transparent !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+    border-radius: 0 !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+  }
+
+  /* Make sure text colors are high-contrast for paper printing */
+  .text-emerald-700, .text-rose-700, .text-indigo-700, .text-indigo-900, .text-slate-800, .text-slate-900 {
+    color: #000000 !important;
+  }
+  
+  .text-slate-600, .text-slate-500, .text-gray-400 {
+    color: #333333 !important;
+  }
+}
+

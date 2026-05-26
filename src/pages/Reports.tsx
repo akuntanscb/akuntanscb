@@ -62,6 +62,78 @@ function oklchToHsl(oklchStr: string): string {
   return `hsla(${hslHue}, ${hslSaturation}%, ${hslLightness}%, ${aVal})`;
 }
 
+// Helper to convert modern oklab() color syntax to universally supported rgba() format
+function oklabToRgb(oklabStr: string): string {
+  const match = oklabStr.match(/oklab\(([^)]+)\)/);
+  if (!match) return oklabStr;
+  
+  const content = match[1].trim();
+  // Standardize delimiters by replacing "/" with " " and removing commas
+  const cleanContent = content.replace(/\//g, ' ').replace(/,/g, ' ');
+  const parts = cleanContent.split(/\s+/).filter(Boolean);
+  
+  if (parts.length < 3) return oklabStr;
+  
+  const lVal = parts[0];
+  const aVal = parts[1];
+  const bVal = parts[2];
+  const alphaVal = parts[3] || '1';
+  
+  // Parse Lightness (L)
+  let L = parseFloat(lVal);
+  if (lVal.includes('%')) {
+    L = parseFloat(lVal) / 100;
+  }
+  
+  // Parse a and b
+  let a = parseFloat(aVal);
+  if (aVal.includes('%')) {
+    a = parseFloat(aVal) / 100;
+  }
+  let b = parseFloat(bVal);
+  if (bVal.includes('%')) {
+    b = parseFloat(bVal) / 100;
+  }
+  
+  if (isNaN(L) || isNaN(a) || isNaN(b)) return 'rgba(255, 255, 255, 1)';
+  
+  // Convert OKLAB to approximate RGB (Using the official Oklab matrices from Björn Ottosson):
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855414 * b;
+  
+  const l = l_ * l_ * l_;
+  const m = m_ * m_ * m_;
+  const s = s_ * s_ * s_;
+  
+  let r_lin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  let g_lin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  let b_lin = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  
+  const toSRGB = (x: number) => {
+    if (x <= 0.0031308) {
+      return Math.max(0, Math.min(255, Math.round(12.92 * x * 255)));
+    }
+    return Math.max(0, Math.min(255, Math.round((1.055 * Math.pow(x, 1 / 2.4) - 0.055) * 255)));
+  };
+  
+  const r = toSRGB(r_lin);
+  const g = toSRGB(g_lin);
+  const blue = toSRGB(b_lin);
+  
+  return `rgba(${r}, ${g}, ${blue}, ${alphaVal})`;
+}
+
+// Global helper to replace all oklch() and oklab() style values with safe fallback strings
+function sanitizeColorString(text: string): string {
+  if (typeof text !== 'string') return text;
+  
+  let result = text;
+  result = result.replace(/oklch\(([^)]+)\)/gi, (match) => oklchToHsl(match));
+  result = result.replace(/oklab\(([^)]+)\)/gi, (match) => oklabToRgb(match));
+  return result;
+}
+
 export default function Reports() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -123,43 +195,90 @@ export default function Reports() {
     // Introduce a short delay so React can toggle hidden elements before taking screen snapshot
     await new Promise((resolve) => setTimeout(resolve, 200));
     
-    const stylesheetBackups: { node: HTMLElement; originalDisabled: boolean }[] = [];
+    const stylesheetBackups: { sheet: CSSStyleSheet; node: HTMLElement | null; originalSheetDisabled: boolean; originalNodeDisabled: boolean }[] = [];
     let tempStyleEl: HTMLStyleElement | null = null;
+    const originalGetComputedStyle = window.getComputedStyle;
     
     try {
-      // 1. Gather all CSS rules from existing stylesheets and convert oklch to hsla
-      let combinedCss = '';
-      for (const sheet of Array.from(document.styleSheets)) {
-        const node = sheet.ownerNode as HTMLElement;
-        if (!node) continue;
-        
-        let sheetCss = '';
-        if (node instanceof HTMLStyleElement) {
-          sheetCss = node.textContent || '';
-        } else {
-          try {
-            const rules = Array.from(sheet.cssRules || sheet.rules);
-            sheetCss = rules.map(rule => rule.cssText).join('\n');
-          } catch (e) {
-            console.warn("Could not read stylesheet rules. Falling back:", e);
-          }
+      // Override getComputedStyle to sanitize any returned colors on the fly for html2canvas
+      const styleProxyCache = new Map();
+      window.getComputedStyle = function (el, pseudoElt) {
+        const style = originalGetComputedStyle(el, pseudoElt);
+        if (styleProxyCache.has(style)) {
+          return styleProxyCache.get(style);
         }
         
-        if (sheetCss) {
-          combinedCss += sheetCss + '\n';
+        const proxy = new Proxy(style, {
+          get(target, prop, receiver) {
+            if (prop === 'getPropertyValue') {
+              return function (propertyName: string) {
+                const val = target.getPropertyValue(propertyName);
+                if (typeof val === 'string' && (val.toLowerCase().includes('oklab') || val.toLowerCase().includes('oklch'))) {
+                  return sanitizeColorString(val);
+                }
+                return val;
+              };
+            }
+            
+            const val = Reflect.get(target, prop);
+            if (typeof val === 'string' && (val.toLowerCase().includes('oklab') || val.toLowerCase().includes('oklch'))) {
+              return sanitizeColorString(val);
+            }
+            return typeof val === 'function' ? val.bind(target) : val;
+          }
+        });
+        
+        styleProxyCache.set(style, proxy);
+        return proxy;
+      };
+
+      // 1. Gather all CSS rules from existing stylesheets and convert oklch and oklab to fallback colors
+      let combinedCss = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          const node = sheet.ownerNode as HTMLElement;
+          let sheetCss = '';
+          
+          if (node && node instanceof HTMLStyleElement) {
+            sheetCss = node.textContent || '';
+          } else {
+            try {
+              const rules = Array.from(sheet.cssRules || sheet.rules);
+              sheetCss = rules.map(rule => rule.cssText).join('\n');
+            } catch (e) {
+              console.warn("Could not read stylesheet rules. Falling back:", e);
+            }
+          }
+          
+          if (sheetCss) {
+            combinedCss += sheetCss + '\n';
+          }
+          
           stylesheetBackups.push({
-            node,
-            originalDisabled: (node as any).disabled || false
+            sheet,
+            node: node || null,
+            originalSheetDisabled: sheet.disabled,
+            originalNodeDisabled: node ? (node as any).disabled : false
           });
-          // Temporarily disable original stylesheets so html2canvas doesn't try to parse them
-          (node as any).disabled = true;
+          
+          // Disable stylesheet and its node to block html2canvas raw parsing completely
+          sheet.disabled = true;
+          if (node) {
+            (node as any).disabled = true;
+          }
+        } catch (e) {
+          console.warn("Error processing stylesheet for PDF render:", e);
         }
       }
 
-      // 2. Perform the regex replacement to convert all oklch(...) occurrences inside CSS
-      const replacedCss = combinedCss.replace(/oklch\(([^)]+)\)/g, (match) => {
-        return oklchToHsl(match);
-      });
+      // 2. Perform the regex replacement to convert all oklch(...) and oklab(...) occurrences inside CSS
+      const replacedCss = combinedCss
+        .replace(/oklch\(([^)]+)\)/gi, (match) => {
+          return oklchToHsl(match);
+        })
+        .replace(/oklab\(([^)]+)\)/gi, (match) => {
+          return oklabToRgb(match);
+        });
 
       // 3. Inject the sanitized style sheet
       tempStyleEl = document.createElement('style');
@@ -181,7 +300,17 @@ export default function Reports() {
         useCORS: true,
         logging: false,
         backgroundColor: '#ffffff',
-        windowWidth: 1200 // Lock width for desktop-style rendering columns
+        windowWidth: 1200, // Lock width for desktop-style rendering columns
+        ignoreElements: (el) => {
+          // Explicitly prevent html2canvas from copying other styles/links into its cloned iframe DOM
+          if (el.tagName === 'STYLE' && el.id !== 'temp-pdf-style-sanitized') {
+            return true;
+          }
+          if (el.tagName === 'LINK' && (el as HTMLLinkElement).rel === 'stylesheet') {
+            return true;
+          }
+          return false;
+        }
       });
       
       // Restore styles
@@ -229,12 +358,22 @@ export default function Reports() {
     } catch (error) {
       console.error('Gagal merender PDF:', error);
     } finally {
+      // Restore window.getComputedStyle to its original implementation
+      window.getComputedStyle = originalGetComputedStyle;
+      
       // 4. Always tear down the temporary style sheet and restore the original sheets
       if (tempStyleEl && tempStyleEl.parentNode) {
         tempStyleEl.parentNode.removeChild(tempStyleEl);
       }
       for (const backup of stylesheetBackups) {
-        (backup.node as any).disabled = backup.originalDisabled;
+        try {
+          backup.sheet.disabled = backup.originalSheetDisabled;
+          if (backup.node) {
+            (backup.node as any).disabled = backup.originalNodeDisabled;
+          }
+        } catch (e) {
+          console.warn("Error restoring stylesheet during cleanup:", e);
+        }
       }
       setPdfLoading(false);
     }
@@ -452,7 +591,7 @@ export default function Reports() {
 
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center bg-white/40 p-1 rounded-2xl">
+      <div className="flex justify-between items-center bg-white/40 p-1 rounded-2xl print:hidden">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Laporan Keuangan</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Laporan otomatis berbasis posting jurnal</p>
@@ -505,7 +644,7 @@ export default function Reports() {
         </div>
       </div>
 
-      <div className="flex border-b border-natural-border overflow-x-auto whitespace-nowrap scrollbar-none">
+      <div className="flex border-b border-natural-border overflow-x-auto whitespace-nowrap scrollbar-none print:hidden">
         <button 
           onClick={() => setActiveTab('neraca')}
           className={cn(
