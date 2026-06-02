@@ -20,7 +20,11 @@ import {
   CalendarDays,
   X,
   PlusCircle,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Printer,
+  FileSpreadsheet,
+  FileText
 } from 'lucide-react';
 import { cn, formatRupiah } from '../lib/utils';
 import { 
@@ -32,6 +36,120 @@ import {
 } from '../services/debtService';
 import { DebtReceivable, DebtPayment } from '../types';
 import { auth } from '../lib/firebase';
+import jsPDF from 'jspdf';
+import html2canvas from 'html2canvas';
+
+// Helper to convert modern oklch() color syntax to universally supported hsla() format
+function oklchToHsl(oklchStr: string): string {
+  const match = oklchStr.match(/oklch\(([^)]+)\)/);
+  if (!match) return oklchStr;
+  
+  const content = match[1].trim();
+  const cleanContent = content.replace(/\//g, ' ').replace(/,/g, ' ');
+  const parts = cleanContent.split(/\s+/).filter(Boolean);
+  
+  if (parts.length < 3) return oklchStr;
+  
+  const lVal = parts[0];
+  const cVal = parts[1];
+  const hVal = parts[2];
+  const aVal = parts[3] || '1';
+  
+  let l = parseFloat(lVal);
+  if (lVal.includes('%')) {
+    l = parseFloat(lVal) / 100;
+  }
+  
+  let c = parseFloat(cVal);
+  if (cVal.includes('%')) {
+    c = parseFloat(cVal) / 100;
+  }
+  
+  let h = parseFloat(hVal);
+  if (hVal.includes('deg')) {
+    h = parseFloat(hVal);
+  } else if (hVal.includes('rad')) {
+    h = (parseFloat(hVal) * 180) / Math.PI;
+  } else if (hVal.includes('turn')) {
+    h = parseFloat(hVal) * 360;
+  }
+  
+  if (isNaN(l) || isNaN(c) || isNaN(h)) return 'rgba(255, 255, 255, 1)';
+  
+  const hslLightness = Math.round(l * 100);
+  const hslSaturation = Math.min(100, Math.round(c * 250));
+  const hslHue = Math.round(h % 360);
+  
+  return `hsla(${hslHue}, ${hslSaturation}%, ${hslLightness}%, ${aVal})`;
+}
+
+// Helper to convert modern oklab() color syntax to universally supported rgba() format
+function oklabToRgb(oklabStr: string): string {
+  const match = oklabStr.match(/oklab\(([^)]+)\)/);
+  if (!match) return oklabStr;
+  
+  const content = match[1].trim();
+  const cleanContent = content.replace(/\//g, ' ').replace(/,/g, ' ');
+  const parts = cleanContent.split(/\s+/).filter(Boolean);
+  
+  if (parts.length < 3) return oklabStr;
+  
+  const lVal = parts[0];
+  const aVal = parts[1];
+  const bVal = parts[2];
+  const alphaVal = parts[3] || '1';
+  
+  let L = parseFloat(lVal);
+  if (lVal.includes('%')) {
+    L = parseFloat(lVal) / 100;
+  }
+  
+  let a = parseFloat(aVal);
+  if (aVal.includes('%')) {
+    a = parseFloat(aVal) / 100;
+  }
+  let b = parseFloat(bVal);
+  if (bVal.includes('%')) {
+    b = parseFloat(bVal) / 100;
+  }
+  
+  if (isNaN(L) || isNaN(a) || isNaN(b)) return 'rgba(255, 255, 255, 1)';
+  
+  const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+  const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+  const s_ = L - 0.0894841775 * a - 1.2914855414 * b;
+  
+  const l = l_ * l_ * l_;
+  const m = m_ * m_ * m_;
+  const s = s_ * s_ * s_;
+  
+  let r_lin = 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+  let g_lin = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+  let b_lin = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+  
+  const toSRGB = (x: number) => {
+    if (x <= 0.0031308) {
+      return Math.max(0, Math.min(255, Math.round(12.92 * x * 255)));
+    }
+    return Math.max(0, Math.min(255, Math.round((1.055 * Math.pow(x, 1 / 2.4) - 0.055) * 255)));
+  };
+  
+  const r = toSRGB(r_lin);
+  const g = toSRGB(g_lin);
+  const blue = toSRGB(b_lin);
+  
+  return `rgba(${r}, ${g}, ${blue}, ${alphaVal})`;
+}
+
+// Global helper to replace all oklch() and oklab() style values with safe fallback strings
+function sanitizeColorString(text: string): string {
+  if (typeof text !== 'string') return text;
+  
+  let result = text;
+  result = result.replace(/oklch\(([^)]+)\)/gi, (match) => oklchToHsl(match));
+  result = result.replace(/oklab\(([^)]+)\)/gi, (match) => oklabToRgb(match));
+  return result;
+}
 
 export default function HutangPiutang() {
   const [debts, setDebts] = useState<DebtReceivable[]>([]);
@@ -45,6 +163,11 @@ export default function HutangPiutang() {
   const [isAddEditOpen, setIsAddEditOpen] = useState<boolean>(false);
   const [isPaymentOpen, setIsPaymentOpen] = useState<boolean>(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState<boolean>(false);
+  
+  // Download Modal states
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState<boolean>(false);
+  const [downloadReportType, setDownloadReportType] = useState<'all' | 'piutang_aktif' | 'hutang_aktif'>('piutang_aktif');
+  const [downloadPdfLoading, setDownloadPdfLoading] = useState<boolean>(false);
   
   // Selected items for operations
   const [selectedDebt, setSelectedDebt] = useState<DebtReceivable | null>(null);
@@ -349,6 +472,248 @@ export default function HutangPiutang() {
     }, 4500);
   };
 
+  // CSV Downloader
+  const handleDownloadCSV = () => {
+    let listToExport = debts;
+    if (downloadReportType === 'piutang_aktif') {
+      listToExport = debts.filter(d => d.type === 'Piutang' && d.status !== 'Lunas');
+    } else if (downloadReportType === 'hutang_aktif') {
+      listToExport = debts.filter(d => d.type === 'Hutang' && d.status !== 'Lunas');
+    } else {
+      listToExport = filteredAndSortedDebts;
+    }
+
+    if (listToExport.length === 0) {
+      alert("Tidak ada data untuk diunduh!");
+      return;
+    }
+
+    const headers = [
+      "No",
+      "Nama Debitur/Kreditur",
+      "Tipe Transaksi",
+      "Nominal Total",
+      "Uang Muka (DP)",
+      "Jumlah Terbayar",
+      "Sisa Tagihan",
+      "Status",
+      "Umur Transaksi (Hari)",
+      "Umur Kategori",
+      "Tanggal Mulai/Pencatatan",
+      "Tanggal Jatuh Tempo",
+      "Uang Muka Saja?",
+      "PIC Penerima",
+      "Catatan/Memo"
+    ];
+
+    const rows = listToExport.map((item, index) => {
+      const days = getAgingDays(item.date);
+      const agingLabel = getAgingLabelAndColor(item.date, item.status === 'Lunas').label;
+      const amountPaid = (item.downPayment || 0) + item.paidAmount;
+      const isDP = item.isUangMuka ? "Ya" : "Tidak";
+      const pic = (item as any).picName || "";
+      const remarks = item.remarks || "";
+
+      return [
+        index + 1,
+        `"${item.name.replace(/"/g, '""')}"`,
+        item.type,
+        item.totalAmount,
+        item.downPayment || 0,
+        amountPaid,
+        item.remainingBalance,
+        item.status,
+        days,
+        `"${agingLabel.replace(/"/g, '""')}"`,
+        toJSDate(item.date).toISOString().split('T')[0],
+        toJSDate(item.dueDate).toISOString().split('T')[0],
+        isDP,
+        `"${pic.replace(/"/g, '""')}"`,
+        `"${remarks.replace(/"/g, '""')}"`
+      ];
+    });
+
+    const csvContent = [
+      "\ufeff" + headers.join(","), // UTF-8 BOM representation for Excel
+      ...rows.map(e => e.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const dateStr = new Date().toISOString().split('T')[0];
+    const fileNameTitle = downloadReportType === 'piutang_aktif' ? 'Daftar_Tagihan_Piutang_Aktif' :
+                          downloadReportType === 'hutang_aktif' ? 'Daftar_Sisa_Hutang_Vendor' :
+                          'Laporan_Hutang_Piutang';
+    link.setAttribute("download", `${fileNameTitle}_${dateStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Berhasil mengunduh dokumen CSV.');
+    setIsDownloadModalOpen(false);
+  };
+
+  // PDF Downloader (With background layout simulation for clean high-contrast render)
+  const handleDownloadPDF = async () => {
+    const element = document.getElementById('piutang-print-template');
+    if (!element) return;
+    
+    setDownloadPdfLoading(true);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    
+    const stylesheetBackups: { sheet: CSSStyleSheet; node: HTMLElement | null; originalSheetDisabled: boolean; originalNodeDisabled: boolean }[] = [];
+    let tempStyleEl: HTMLStyleElement | null = null;
+    const originalGetComputedStyle = window.getComputedStyle;
+    
+    try {
+      // Override getComputedStyle to sanitize any returned colors on the fly for html2canvas
+      const styleProxyCache = new Map();
+      window.getComputedStyle = function (el, pseudoElt) {
+        const style = originalGetComputedStyle(el, pseudoElt);
+        if (styleProxyCache.has(style)) {
+          return styleProxyCache.get(style);
+        }
+        
+        const proxy = new Proxy(style, {
+          get(target, prop) {
+            if (prop === 'getPropertyValue') {
+              return function (propertyName: string) {
+                const val = target.getPropertyValue(propertyName);
+                if (typeof val === 'string' && (val.toLowerCase().includes('oklab') || val.toLowerCase().includes('oklch'))) {
+                  return sanitizeColorString(val);
+                }
+                return val;
+              };
+            }
+            
+            const val = Reflect.get(target, prop);
+            if (typeof val === 'string' && (val.toLowerCase().includes('oklab') || val.toLowerCase().includes('oklch'))) {
+              return sanitizeColorString(val);
+            }
+            return typeof val === 'function' ? val.bind(target) : val;
+          }
+        });
+        
+        styleProxyCache.set(style, proxy);
+        return proxy;
+      };
+
+      // 1. Gather all CSS rules from existing stylesheets and convert oklch and oklab to fallback colors
+      let combinedCss = '';
+      for (const sheet of Array.from(document.styleSheets)) {
+        try {
+          const node = sheet.ownerNode as HTMLElement;
+          let sheetCss = '';
+          
+          if (node && node instanceof HTMLStyleElement) {
+            sheetCss = node.textContent || '';
+          } else {
+            try {
+              const rules = Array.from(sheet.cssRules || sheet.rules);
+              sheetCss = rules.map(rule => rule.cssText).join('\n');
+            } catch (e) {
+              console.warn("Could not read stylesheet rules. Falling back:", e);
+            }
+          }
+          
+          if (sheetCss) {
+            combinedCss += sheetCss + '\n';
+          }
+          
+          stylesheetBackups.push({
+            sheet,
+            node: node || null,
+            originalSheetDisabled: sheet.disabled,
+            originalNodeDisabled: node ? (node as any).disabled : false
+          });
+          
+          sheet.disabled = true;
+          if (node) {
+            (node as any).disabled = true;
+          }
+        } catch (e) {
+          console.warn("Error processing stylesheet for PDF render:", e);
+        }
+      }
+
+      // 2. Perform the regex replacement to convert all oklch(...) and oklab(...) occurrences inside CSS
+      const replacedCss = combinedCss
+        .replace(/oklch\(([^)]+)\)/gi, (match) => oklchToHsl(match))
+        .replace(/oklab\(([^)]+)\)/gi, (match) => oklabToRgb(match));
+
+      // 3. Inject the sanitized style sheet
+      tempStyleEl = document.createElement('style');
+      tempStyleEl.id = 'temp-pdf-style-sanitized-hp';
+      tempStyleEl.textContent = replacedCss;
+      document.head.appendChild(tempStyleEl);
+
+      const canvas = await html2canvas(element, {
+        scale: 2, // 2x scale for high-quality printing
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+      });
+
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      
+      const margin = 10; // margin in mm
+      const printableWidth = pdfWidth - (margin * 2);
+      const imgWidth = printableWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = margin;
+
+      pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+      heightLeft -= (pdfHeight - margin * 2);
+
+      while (heightLeft >= 0) {
+        position = heightLeft - imgHeight + margin;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', margin, position, imgWidth, imgHeight);
+        heightLeft -= (pdfHeight - margin * 2);
+      }
+
+      const fileTitle = downloadReportType === 'piutang_aktif' ? 'Lampiran_Tagihan_Piutang_Aktif' :
+                        downloadReportType === 'hutang_aktif' ? 'Lampiran_Sisa_Hutang_Vendor' :
+                        'Lampiran_Rekap_Hutang_Piutang';
+      
+      const dateStr = new Date().toISOString().split('T')[0];
+      pdf.save(`${fileTitle}_${dateStr}.pdf`);
+      showToast('Laporan PDF resmi berhasil diunduh.');
+      setIsDownloadModalOpen(false);
+    } catch (error) {
+      console.error('Gagal merender PDF:', error);
+      alert('Gagal menghasilkan file PDF. Gunakan ekspor CSV atau hubungi administrator.');
+    } finally {
+      window.getComputedStyle = originalGetComputedStyle;
+      
+      if (tempStyleEl && tempStyleEl.parentNode) {
+        tempStyleEl.parentNode.removeChild(tempStyleEl);
+      }
+      for (const backup of stylesheetBackups) {
+        try {
+          backup.sheet.disabled = backup.originalSheetDisabled;
+          if (backup.node) {
+            (backup.node as any).disabled = backup.originalNodeDisabled;
+          }
+        } catch (e) {
+          console.warn("Error restoring stylesheet during cleanup:", e);
+        }
+      }
+      setDownloadPdfLoading(false);
+    }
+  };
+
   // Processing, filtering & sorting list
   const filteredAndSortedDebts = React.useMemo(() => {
     return debts
@@ -405,12 +770,23 @@ export default function HutangPiutang() {
           <h1 className="text-3xl font-serif italic text-natural-primary">Hutang & Piutang</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Sistem kontrol, umur piutang/hutang, dan manajemen uang muka</p>
         </div>
-        <button 
-          onClick={() => { resetForm(); setIsAddEditOpen(true); }}
-          className="bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center gap-2 transition-all font-semibold shadow-sm text-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Catat Transaksi Baru
-        </button>
+        <div className="flex flex-wrap items-center gap-3 shrink-0 w-full sm:w-auto">
+          <button 
+            type="button"
+            onClick={() => setIsDownloadModalOpen(true)}
+            className="flex-1 sm:flex-none border border-slate-200 hover:bg-slate-50 bg-white text-slate-700 font-sans px-5 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold text-xs shadow-sm cursor-pointer"
+          >
+            <Download className="w-4 h-4 text-slate-500" /> Ekspor & Cetak Laporan
+          </button>
+          
+          <button 
+            type="button"
+            onClick={() => { resetForm(); setIsAddEditOpen(true); }}
+            className="flex-1 sm:flex-none bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Catat Transaksi Baru
+          </button>
+        </div>
       </div>
 
       {/* Monitoring Panels Dashboard */}
@@ -1279,7 +1655,329 @@ export default function HutangPiutang() {
           </div>
         )}
       </AnimatePresence>
+ 
+      {/* MODAL 4: DOWNLOAD & EXPORT MODAL */}
+      <AnimatePresence>
+        {isDownloadModalOpen && (
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              className="bg-white rounded-3xl border border-natural-border shadow-2xl max-w-lg w-full overflow-hidden text-slate-800 font-sans"
+            >
+              {/* Header */}
+              <div className="p-6 border-b border-natural-border bg-slate-50/50 flex justify-between items-center">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-blue-600 shrink-0">
+                    <Download className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Ekspor & Laporan Keuangan</h3>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mt-0.5">Hutang Piutang & Manajemen Tagihan</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsDownloadModalOpen(false)}
+                  className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
 
+              {/* Body */}
+              <div className="p-6 space-y-5">
+                {/* 1. Report Type Selection */}
+                <div className="space-y-2">
+                  <label className="block text-[10px] uppercase tracking-widest text-slate-400 font-bold">Pilih Jenis Data / Laporan</label>
+                  <div className="space-y-2">
+                    <label className={cn(
+                      "flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer",
+                      downloadReportType === 'piutang_aktif' 
+                        ? "bg-emerald-50/50 border-emerald-300 ring-1 ring-emerald-300" 
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    )}>
+                      <input 
+                        type="radio" 
+                        name="downloadReportType" 
+                        value="piutang_aktif"
+                        checked={downloadReportType === 'piutang_aktif'}
+                        onChange={() => setDownloadReportType('piutang_aktif')}
+                        className="mt-1 accent-emerald-600 cursor-pointer"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          <span>Piutang Donatur & Santri (Aktif / Outstanding)</span>
+                          <span className="text-[9px] bg-emerald-100 text-emerald-800 font-normal px-2 py-0.5 rounded-full">Rekomendasi Penagihan</span>
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-relaxed font-sans">
+                          Menyaring khusus seluruh piutang donatur/santri yang belum lunas (sisa tagihan &gt; 0). Cocok digunakan sebagai lampiran resmi dan dasar penagihan.
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className={cn(
+                      "flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer",
+                      downloadReportType === 'hutang_aktif' 
+                        ? "bg-amber-50/50 border-amber-300 ring-1 ring-amber-300" 
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    )}>
+                      <input 
+                        type="radio" 
+                        name="downloadReportType" 
+                        value="hutang_aktif"
+                        checked={downloadReportType === 'hutang_aktif'}
+                        onChange={() => setDownloadReportType('hutang_aktif')}
+                        className="mt-1 accent-amber-600 cursor-pointer"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-amber-950">
+                          Hutang & Liabilitas Vendor (Aktif / Outstanding)
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-relaxed font-sans">
+                          Menyaring khusus hutang madrasah ke vendor atau pihak ketiga yang masih memiliki tunggakan/belum lunas (sisa hutang &gt; 0).
+                        </p>
+                      </div>
+                    </label>
+
+                    <label className={cn(
+                      "flex items-start gap-3 p-3.5 rounded-2xl border transition-all cursor-pointer",
+                      downloadReportType === 'all' 
+                        ? "bg-slate-50 border-slate-300 ring-1 ring-slate-300" 
+                        : "bg-white border-slate-200 hover:bg-slate-50"
+                    )}>
+                      <input 
+                        type="radio" 
+                        name="downloadReportType" 
+                        value="all"
+                        checked={downloadReportType === 'all'}
+                        onChange={() => setDownloadReportType('all')}
+                        className="mt-1 accent-slate-800 cursor-pointer"
+                      />
+                      <div>
+                        <p className="text-xs font-bold text-slate-900">
+                          Seluruh Data Yang Sedang Terfilter ({filteredAndSortedDebts.length} Baris)
+                        </p>
+                        <p className="text-[10px] text-slate-400 mt-1 leading-relaxed font-sans">
+                          Menyimpan kompilasi data yang saat ini tampil di tabel dashboard sesuai dengan filter, pencarian kata kunci, dan pengurutan aktif Anda.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Info Note */}
+                <div className="p-3.5 bg-blue-50 border border-blue-100 rounded-2xl flex items-start gap-2.5 text-[10px] text-blue-800 leading-relaxed font-sans">
+                  <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+                  <div>
+                    <span className="font-bold block mb-0.5">Format PDF Resmi Khusus Penagihan</span>
+                    <p className="text-slate-500">
+                      Untuk keperluan penagihan piutang, gunakan format <strong>Unduh PDF Resmi</strong>. Dokumen PDF akan ter-render otomatis menyertakan KOP Sekolah Keuangan Sosial, rekapitulasi data umur piutang, penanggung jawab (PIC), memo peruntukan, serta lembar otorisasi tanda tangan Bendahara & Yayasan.
+                    </p>
+                  </div>
+                </div>
+
+                {/* 2. Download Buttons */}
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={handleDownloadCSV}
+                    className="py-3 px-4 border border-emerald-200 hover:bg-emerald-50 bg-white text-emerald-800 rounded-2xl transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer"
+                  >
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Unduh CSV (Excel)</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={downloadPdfLoading}
+                    onClick={handleDownloadPDF}
+                    className={cn(
+                      "py-3 px-4 text-white rounded-2xl transition-all font-bold text-xs flex items-center justify-center gap-2 shadow-sm cursor-pointer",
+                      downloadPdfLoading 
+                        ? "bg-slate-400 cursor-wait" 
+                        : "bg-natural-primary hover:opacity-95"
+                    )}
+                  >
+                    <Printer className="w-4 h-4" />
+                    <span>{downloadPdfLoading ? 'Menyusun PDF...' : 'Unduh PDF Resmi'}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* OFF-SCREEN PRINT TEMPLATE FOR HIGH-FIDELITY PDF GENERATION */}
+      <div 
+        id="piutang-print-template" 
+        className="fixed -left-[9999px] top-0 bg-white text-slate-900 p-12 space-y-6 font-sans text-xs"
+        style={{ width: '800px' }}
+      >
+        {/* Header (KOP SURAT) */}
+        <div className="text-center border-b-2 border-double border-slate-900 pb-5 space-y-1">
+          <h2 className="text-xl font-bold font-serif uppercase tracking-normal text-slate-1000">MADRASAH / YAYASAN PARADIGMA BARU</h2>
+          <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest font-semibold">Sistem Akuntansi Keuangan Sektor Sosial & Keagamaan</p>
+          <p className="text-[9px] text-slate-440 font-mono">Kompleks Pondok Pesantren • Email: keuangan.paradigmabaru@gmail.com • Telepon: (021) 8593-0291</p>
+        </div>
+
+        {/* Title & Date */}
+        <div className="flex justify-between items-end pt-3">
+          <div>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+              {downloadReportType === 'piutang_aktif' ? 'Laporan Umur Piutang Donatur & Santri (Penagihan)' : 
+               downloadReportType === 'hutang_aktif' ? 'Laporan Umur Hutang & Liabilitas Vendor' : 
+               'Laporan Rekapitulasi Hutang & Piutang'}
+            </h3>
+            <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-1">
+              <span>Status Dokumen:</span>
+              <span className="font-semibold text-rose-700 capitalize">Outstanding / Tunggakan Belum Lunas</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-slate-500">
+              Tanggal Cetak: <span className="font-semibold text-slate-900">{new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            </p>
+            <p className="text-[9px] text-slate-400 font-mono">Dibuat oleh: {auth.currentUser?.email || 'Bendahara Keuangan'}</p>
+          </div>
+        </div>
+
+        {/* Financial Summary Box */}
+        <div className="grid grid-cols-3 gap-4 bg-slate-50 border border-slate-200 p-4 rounded-xl">
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Total Transaksi</p>
+            <p className="text-xs font-semibold font-mono text-slate-800">
+              {formatRupiah(
+                debts
+                  .filter(d => {
+                    if (downloadReportType === 'piutang_aktif') return d.type === 'Piutang' && d.status !== 'Lunas';
+                    if (downloadReportType === 'hutang_aktif') return d.type === 'Hutang' && d.status !== 'Lunas';
+                    return true;
+                  })
+                  .reduce((sum, d) => sum + d.totalAmount, 0)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-slate-400 font-bold">Sudah Terbayar</p>
+            <p className="text-xs font-semibold font-mono text-slate-800">
+              {formatRupiah(
+                debts
+                  .filter(d => {
+                    if (downloadReportType === 'piutang_aktif') return d.type === 'Piutang' && d.status !== 'Lunas';
+                    if (downloadReportType === 'hutang_aktif') return d.type === 'Hutang' && d.status !== 'Lunas';
+                    return true;
+                  })
+                  .reduce((sum, d) => sum + (d.downPayment + d.paidAmount), 0)
+              )}
+            </p>
+          </div>
+          <div>
+            <p className="text-[9px] uppercase tracking-wider text-rose-500 font-bold">Total Sisa Tunggakan (SISA)</p>
+            <p className="text-xs font-bold font-mono text-rose-700">
+              {formatRupiah(
+                debts
+                  .filter(d => {
+                    if (downloadReportType === 'piutang_aktif') return d.type === 'Piutang' && d.status !== 'Lunas';
+                    if (downloadReportType === 'hutang_aktif') return d.type === 'Hutang' && d.status !== 'Lunas';
+                    return true;
+                  })
+                  .reduce((sum, d) => sum + d.remainingBalance, 0)
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Invoice Table list */}
+        <table className="w-full text-left border-collapse border border-slate-200">
+          <thead>
+            <tr className="bg-slate-50 text-[9px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-250">
+              <th className="p-2 border-r border-slate-200 text-center w-8">No</th>
+              <th className="p-2 border-r border-slate-200">Nama Lengkap Donatur/Debitur/Kreditur</th>
+              <th className="p-2 border-r border-slate-200 text-center">Tanggal Mulai</th>
+              <th className="p-2 border-r border-slate-200 text-right">Sisa Tunggakan</th>
+              <th className="p-2 border-r border-slate-200 text-center">Kategori Umur (Aging)</th>
+              <th className="p-2 text-center">Jatuh Tempo</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-200 border-b border-slate-200 text-[9px]">
+            {debts
+              .filter(d => {
+                if (downloadReportType === 'piutang_aktif') return d.type === 'Piutang' && d.status !== 'Lunas';
+                if (downloadReportType === 'hutang_aktif') return d.type === 'Hutang' && d.status !== 'Lunas';
+                return true;
+              })
+              .map((item, idx) => {
+                const agingInfo = getAgingLabelAndColor(item.date, item.status === 'Lunas');
+                return (
+                  <tr key={item.id} className="hover:bg-slate-50/50">
+                    <td className="p-2 border-r border-slate-200 text-center font-mono">{idx + 1}</td>
+                    <td className="p-2 border-r border-slate-200">
+                      <div>
+                        <p className="font-bold text-slate-900">{item.name}</p>
+                        {item.remarks && <p className="text-[8.5px] text-slate-550 italic mt-0.5 leading-relaxed">Memo: {item.remarks}</p>}
+                        {(item as any).picName && <p className="text-[8.5px] text-emerald-800 mt-0.5 font-medium">PIC: {(item as any).picName}</p>}
+                      </div>
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center font-mono">
+                      {toJSDate(item.date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-right font-mono font-bold text-slate-900">
+                      {formatRupiah(item.remainingBalance)}
+                    </td>
+                    <td className="p-2 border-r border-slate-200 text-center font-sans font-semibold text-slate-700">
+                      {agingInfo.label}
+                    </td>
+                    <td className="p-2 text-center font-mono text-slate-600">
+                      {toJSDate(item.dueDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}
+                    </td>
+                  </tr>
+                );
+              })}
+            {debts.filter(d => {
+              if (downloadReportType === 'piutang_aktif') return d.type === 'Piutang' && d.status !== 'Lunas';
+              if (downloadReportType === 'hutang_aktif') return d.type === 'Hutang' && d.status !== 'Lunas';
+              return true;
+            }).length === 0 && (
+              <tr>
+                <td colSpan={6} className="p-6 text-center text-slate-400 italic">
+                  Tidak ada data outstanding yang ditemukan untuk kategori laporan ini.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+
+        {/* Footer info/Penjelasan hukum */}
+        <div className="pt-2 font-sans">
+          <p className="text-[8.5px] text-slate-500 leading-relaxed italic">
+            * Rekapitulasi daftar umur piutang/hutang ini ditarik secara langsung dari basis data Sistem Kas & Buku Besar Madrasah yang terpusat. Lembaran rekap laporan ini sah dilampirkan sebagai dasar utama kelayakan administratif untuk penagihan piutang donatur/tunggakan santri yang bersangkutan demi tertib administrasi keuangan yayasan.
+          </p>
+        </div>
+
+        {/* Signature lines */}
+        <div className="grid grid-cols-2 gap-12 pt-12 text-center font-sans">
+          <div className="space-y-16">
+            <p className="text-[10px] font-sans font-semibold text-slate-500 uppercase tracking-widest animate-pulse">Dibuat Oleh,</p>
+            <div className="space-y-1">
+              <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[140px]">
+                {auth.currentUser?.email ? auth.currentUser.email.split('@')[0].toUpperCase() : 'BENDAHARA MADRASAH'}
+              </p>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Staf Administrasi Keuangan</p>
+            </div>
+          </div>
+          <div className="space-y-16">
+            <p className="text-[10px] font-sans font-semibold text-slate-500 uppercase tracking-widest">Mengetahui & Menyetujui,</p>
+            <div className="space-y-1">
+              <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[140px]">KEPALA MADRASAH / YAYASAN</p>
+              <p className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Pimpinan Lembaga Pajak & Sosial</p>
+            </div>
+          </div>
+        </div>
+      </div>
+ 
     </div>
   );
 }
