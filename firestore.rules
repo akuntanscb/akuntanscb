@@ -113,7 +113,7 @@ service cloud.firestore {
              data.logoType in ['school', 'finance', 'shield', 'custom'] &&
              data.colorTheme in ['original', 'emerald', 'indigo', 'slate', 'rose', 'violet'] &&
              data.invoiceTemplate in ['classic', 'modern', 'minimalist'] &&
-             (!('customLogoUrl' in data) || (data.customLogoUrl is string && data.customLogoUrl.size() <= 2000)) &&
+             (!('customLogoUrl' in data) || (data.customLogoUrl is string && data.customLogoUrl.size() <= 250000)) &&
              (!('currencySymbol' in data) || (data.currencySymbol is string && data.currencySymbol.size() <= 8));
     }
 
