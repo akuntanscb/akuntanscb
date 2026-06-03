@@ -58,7 +58,8 @@ export const createDebt = async (
   remarks: string,
   userId: string,
   isUangMuka: boolean = false,
-  picName: string = ''
+  picName: string = '',
+  cashAccountId?: string
 ): Promise<string> => {
   try {
     const remainingBalance = isUangMuka ? totalAmount : (totalAmount - downPayment);
@@ -72,7 +73,9 @@ export const createDebt = async (
 
     // 1. Resolve Chart of Accounts to balance the entry
     const accounts = await getAccounts();
-    const kasAccount = accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101');
+    const kasAccount = cashAccountId
+      ? accounts.find(a => a.id === cashAccountId) || accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101')
+      : accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101');
     let piutangAccount = accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Piutang')) || accounts.find(a => a.code === '1201');
     let hutangAccount = accounts.find(a => a.category === 'Liabilitas' && a.subCategory.toLowerCase().includes('hutang')) || accounts.find(a => a.code === '2102');
     let revenueAccount = accounts.find(a => a.category === 'Pendapatan') || accounts.find(a => a.code === '4103');
@@ -152,7 +155,9 @@ export const createDebt = async (
       journalId: journalRef.id,
       isUangMuka,
       picName,
-      dpRefNumber: refNum
+      dpRefNumber: refNum,
+      cashAccountId: kasAccount?.id || '',
+      cashAccountName: kasAccount?.name || ''
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_PATH), docData);
@@ -167,7 +172,8 @@ export const addDebtPayment = async (
   debtId: string,
   paymentDate: Date,
   paymentAmount: number,
-  paymentNotes: string
+  paymentNotes: string,
+  cashAccountId?: string
 ): Promise<void> => {
   const docRef = doc(db, COLLECTION_PATH, debtId);
   try {
@@ -181,7 +187,9 @@ export const addDebtPayment = async (
 
     // 1. Resolve accounting accounts for installment
     const accounts = await getAccounts();
-    const kasAccount = accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101');
+    const kasAccount = cashAccountId
+      ? accounts.find(a => a.id === cashAccountId) || accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101')
+      : accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Kas')) || accounts.find(a => a.code === '1101');
     let piutangAccount = accounts.find(a => a.category === 'Aset' && a.subCategory.includes('Piutang')) || accounts.find(a => a.code === '1201');
     let hutangAccount = accounts.find(a => a.category === 'Liabilitas' && a.subCategory.toLowerCase().includes('hutang')) || accounts.find(a => a.code === '2102');
 
@@ -215,7 +223,9 @@ export const addDebtPayment = async (
       id: Math.random().toString(36).substring(2, 9),
       date: Timestamp.fromDate(paymentDate),
       amount: paymentAmount,
-      notes: paymentNotes || `Cicilan/Angsuran (Ledger Ref: ${journalRef.id})`
+      notes: paymentNotes || `Cicilan/Angsuran (Ledger Ref: ${journalRef.id})`,
+      cashAccountId: kasAccount?.id || '',
+      cashAccountName: kasAccount?.name || ''
     };
     (newPayment as any).journalId = journalRef.id;
 

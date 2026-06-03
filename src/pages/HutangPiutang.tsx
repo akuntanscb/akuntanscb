@@ -34,7 +34,8 @@ import {
   updateDebtDetails, 
   deleteDebt 
 } from '../services/debtService';
-import { DebtReceivable, DebtPayment } from '../types';
+import { getAccounts } from '../services/accountService';
+import { DebtReceivable, DebtPayment, Account } from '../types';
 import { auth } from '../lib/firebase';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
@@ -194,6 +195,9 @@ export default function HutangPiutang() {
   const [payDate, setPayDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [payAmount, setPayAmount] = useState<number>(0);
   const [payNotes, setPayNotes] = useState<string>('');
+  const [cashAccounts, setCashAccounts] = useState<Account[]>([]);
+  const [selectedCashAccountId, setSelectedCashAccountId] = useState<string>('');
+  const [formCashAccountId, setFormCashAccountId] = useState<string>('');
 
   // Load data
   const loadData = async () => {
@@ -201,6 +205,17 @@ export default function HutangPiutang() {
     try {
       const data = await getDebts();
       setDebts(data);
+
+      const accountsList = await getAccounts();
+      const cashList = accountsList.filter(
+        a => a.category === 'Aset' && 
+        (a.subCategory.toLowerCase().includes('kas') || a.subCategory.toLowerCase().includes('bank'))
+      );
+      setCashAccounts(cashList);
+      if (cashList.length > 0) {
+        setSelectedCashAccountId(prev => prev || cashList[0].id);
+        setFormCashAccountId(prev => prev || cashList[0].id);
+      }
     } catch (err) {
       console.error("Gagal mengambil data hutang/piutang", err);
     } finally {
@@ -374,7 +389,8 @@ export default function HutangPiutang() {
           formRemarks,
           userId,
           isUangMuka,
-          isUangMuka ? picName : ''
+          isUangMuka ? picName : '',
+          formCashAccountId
         );
         showToast('Berhasil mencatat transaksi hutang-piutang baru.');
       }
@@ -401,6 +417,9 @@ export default function HutangPiutang() {
     setIsUangMuka(false);
     setPicName('');
     setFormError('');
+    if (cashAccounts.length > 0) {
+      setFormCashAccountId(cashAccounts[0].id);
+    }
   };
 
   // Open Edit Dialog
@@ -415,6 +434,9 @@ export default function HutangPiutang() {
     setFormRemarks(debt.remarks || '');
     setIsUangMuka(!!debt.isUangMuka);
     setPicName((debt as any).picName || '');
+    if (debt.cashAccountId) {
+      setFormCashAccountId(debt.cashAccountId);
+    }
     setIsAddEditOpen(true);
   };
 
@@ -438,7 +460,8 @@ export default function HutangPiutang() {
         selectedDebt.id,
         new Date(payDate),
         payAmount,
-        payNotes
+        payNotes,
+        selectedCashAccountId
       );
       showToast(`Berhasil mencatat pembayaran sebesar ${formatRupiah(payAmount)}`);
       setIsPaymentOpen(false);
@@ -1374,6 +1397,32 @@ export default function HutangPiutang() {
                   </div>
                 )}
 
+                {/* Cash/Bank selector for DP or Uang Muka in creation modal */}
+                {(isUangMuka || (formDownPayment > 0 && !isUangMuka)) && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="space-y-1"
+                  >
+                    <label htmlFor="formCashAccountId" className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">
+                      {formType === 'Piutang' ? (isUangMuka ? 'Sumber Kas / Bank Pembayar (Kredit)' : 'Tujuan Kas / Bank DP (Debit)') : 'Sumber Kas / Bank DP (Kredit)'}
+                    </label>
+                    <select
+                      id="formCashAccountId"
+                      required
+                      value={formCashAccountId}
+                      onChange={(e) => setFormCashAccountId(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer font-sans"
+                    >
+                      {cashAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id}>
+                          [{acc.code}] - {acc.name}
+                        </option>
+                      ))}
+                    </select>
+                  </motion.div>
+                )}
+
                 {/* Remarks/Keterangan */}
                 <div>
                   <label htmlFor="formRemarks" className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">
@@ -1498,6 +1547,26 @@ export default function HutangPiutang() {
                       Bayar Lunas
                     </button>
                   </div>
+                </div>
+
+                {/* Cash/Bank Account Source Option */}
+                <div>
+                  <label htmlFor="selectedCashAccountId" className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">
+                    {selectedDebt.type === 'Piutang' ? 'Tujuan Kas / Bank (Debit)' : 'Sumber Kas / Bank (Kredit)'}
+                  </label>
+                  <select
+                    id="selectedCashAccountId"
+                    required
+                    value={selectedCashAccountId}
+                    onChange={(e) => setSelectedCashAccountId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer font-sans"
+                  >
+                    {cashAccounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        [{acc.code}] - {acc.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
 
                 {/* Payment Date */}
@@ -1625,10 +1694,17 @@ export default function HutangPiutang() {
                           <span className="font-mono font-bold text-emerald-600">+{formatRupiah(p.amount)}</span>
                         </div>
                         <p className="text-[10px] text-slate-500 italic">“{p.notes || 'Tanpa keterangan memo'}”</p>
-                        <p className="text-[9px] text-gray-400 flex items-center gap-1 pt-1">
-                          <Calendar className="w-3 h-3 text-slate-300" />
-                          {toJSDate(p.date || selectedDebt.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
-                        </p>
+                        <div className="flex justify-between items-center text-[9px] text-gray-400 pt-1 border-t border-slate-50 mt-1">
+                          <p className="flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-slate-300" />
+                            {toJSDate(p.date || selectedDebt.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
+                          </p>
+                          {p.cashAccountName && (
+                            <span className="bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded font-semibold text-[8px] tracking-wider uppercase border border-emerald-100">
+                              {p.cashAccountName}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     ))
                   ) : (

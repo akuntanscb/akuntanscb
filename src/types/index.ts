@@ -57,6 +57,8 @@ export interface DebtPayment {
   date: any;
   amount: number;
   notes: string;
+  cashAccountId?: string;
+  cashAccountName?: string;
 }
 
 export interface DebtReceivable {
@@ -78,5 +80,7 @@ export interface DebtReceivable {
   picName?: string;
   dpRefNumber?: string;
   journalId?: string;
+  cashAccountId?: string;
+  cashAccountName?: string;
 }
 
