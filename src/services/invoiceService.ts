@@ -17,7 +17,7 @@ import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
 
 const COLLECTION_PATH = 'invoices';
 
-export const generateInvoiceNumber = async (): Promise<string> => {
+export const generateInvoiceNumber = async (type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur'): Promise<string> => {
   try {
     const q = query(collection(db, COLLECTION_PATH), orderBy('invoiceNumber', 'desc'));
     const snapshot = await getDocs(q);
@@ -25,16 +25,19 @@ export const generateInvoiceNumber = async (): Promise<string> => {
     const year = now.getFullYear();
     
     let lastNum = 0;
+    const prefix = type === 'Penerimaan' ? 'BKM' : type === 'Pengeluaran' ? 'BKK' : 'INV';
+    
     if (!snapshot.empty) {
-      // Find the last INV for the current year
+      // Find the last range for the current year
       const yearInvoice = snapshot.docs.find(doc => {
         const num = doc.data().invoiceNumber || '';
-        return num.startsWith(`INV/${year}/`);
+        return num.startsWith(`${prefix}/${year}/`);
       });
       
       if (yearInvoice) {
         const lastInvoiceNumber = yearInvoice.data().invoiceNumber;
-        const match = lastInvoiceNumber.match(/INV\/\d{4}\/(\d+)/);
+        const regexStr = `${prefix}\\/${year}\\/(\\d+)`;
+        const match = lastInvoiceNumber.match(new RegExp(regexStr));
         if (match && match[1]) {
           lastNum = parseInt(match[1], 10);
         }
@@ -42,11 +45,12 @@ export const generateInvoiceNumber = async (): Promise<string> => {
     }
     
     const nextNum = String(lastNum + 1).padStart(3, '0');
-    return `INV/${year}/${nextNum}`;
+    return `${prefix}/${year}/${nextNum}`;
   } catch (error) {
     console.error('Failed to generate invoice number, fallback to random:', error);
+    const prefix = type === 'Penerimaan' ? 'BKM' : type === 'Pengeluaran' ? 'BKK' : 'INV';
     const rand = Math.floor(100 + Math.random() * 900);
-    return `INV/${new Date().getFullYear()}/${rand}`;
+    return `${prefix}/${new Date().getFullYear()}/${rand}`;
   }
 };
 
@@ -59,6 +63,7 @@ export const getInvoices = async (): Promise<Invoice[]> => {
       return {
         id: doc.id,
         ...data,
+        type: data.type || 'Faktur',
         date: data.date instanceof Timestamp ? data.date.toDate() : data.date ? new Date(data.date) : new Date(),
         dueDate: data.dueDate instanceof Timestamp ? data.dueDate.toDate() : data.dueDate ? new Date(data.dueDate) : new Date(),
       } as Invoice;
@@ -77,7 +82,8 @@ export const createInvoice = async (
   items: InvoiceItem[],
   total: number,
   notes: string,
-  status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled' = 'Draft'
+  status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled' = 'Draft',
+  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur'
 ): Promise<string> => {
   try {
     if (!auth.currentUser) throw new Error('User not authenticated');
@@ -91,6 +97,7 @@ export const createInvoice = async (
       total,
       notes,
       status,
+      type,
       createdBy: auth.currentUser.uid,
       createdAt: Timestamp.now()
     };
@@ -111,7 +118,8 @@ export const updateInvoice = async (
   items: InvoiceItem[],
   total: number,
   notes: string,
-  status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled'
+  status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled',
+  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur'
 ): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTION_PATH, id);
@@ -123,6 +131,7 @@ export const updateInvoice = async (
       total,
       notes,
       status,
+      type,
       updatedAt: Timestamp.now()
     });
   } catch (error) {

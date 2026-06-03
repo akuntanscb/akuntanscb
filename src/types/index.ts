@@ -49,6 +49,7 @@ export interface Invoice {
   status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled';
   notes: string;
   createdBy: string;
+  type?: 'Faktur' | 'Penerimaan' | 'Pengeluaran';
 }
 
 export interface DebtPayment {

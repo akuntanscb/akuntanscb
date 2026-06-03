@@ -20,7 +20,7 @@ import {
   Calendar,
   DollarSign
 } from 'lucide-react';
-import { formatRupiah, cn } from '../lib/utils';
+import { formatRupiah, cn, terbilang } from '../lib/utils';
 import { 
   getInvoices, 
   createInvoice, 
@@ -179,10 +179,12 @@ export default function Invoices() {
   const [formItems, setFormItems] = useState<InvoiceItem[]>([
     { description: '', quantity: 1, price: 0, amount: 0 }
   ]);
+  const [formType, setFormType] = useState<'Faktur' | 'Penerimaan' | 'Pengeluaran'>('Faktur');
 
   // Preview Modal States
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [previewType, setPreviewType] = useState<'Faktur' | 'Penerimaan' | 'Pengeluaran'>('Faktur');
 
   // Load Invoices
   const loadData = async () => {
@@ -259,6 +261,22 @@ export default function Invoices() {
     return formItems.reduce((sum, item) => sum + item.amount, 0);
   }, [formItems]);
 
+  // Handle dynamically changing type in form
+  const handleTypeChange = async (type: 'Faktur' | 'Penerimaan' | 'Pengeluaran') => {
+    setFormType(type);
+    if (!editId) {
+      showToast(`Mengambil nomor seri baru...`, "success");
+      try {
+        const num = await generateInvoiceNumber(type);
+        setFormNumber(num);
+      } catch (err) {
+        console.error(err);
+        const prefix = type === 'Penerimaan' ? 'BKM' : type === 'Pengeluaran' ? 'BKK' : 'INV';
+        setFormNumber(`${prefix}/${new Date().getFullYear()}/001`);
+      }
+    }
+  };
+
   // Handle opening New Invoice Modal (triggers sequential identifier)
   const openNewInvoiceModal = async () => {
     setEditId(null);
@@ -271,12 +289,13 @@ export default function Invoices() {
     
     setFormNotes('');
     setFormStatus('Draft');
+    setFormType('Faktur');
     setFormItems([{ description: '', quantity: 1, price: 0, amount: 0 }]);
     setFormError('');
     
     showToast("Menginisialisasi nomor faktur baru...", "success");
     try {
-      const num = await generateInvoiceNumber();
+      const num = await generateInvoiceNumber('Faktur');
       setFormNumber(num);
       setIsFormOpen(true);
     } catch (err) {
@@ -295,6 +314,7 @@ export default function Invoices() {
     setFormDueDate(toJSDate(inv.dueDate).toISOString().split('T')[0]);
     setFormNotes(inv.notes || '');
     setFormStatus(inv.status);
+    setFormType(inv.type || 'Faktur');
     setFormItems(inv.items && inv.items.length > 0 ? inv.items : [{ description: '', quantity: 1, price: 0, amount: 0 }]);
     setFormError('');
     setIsFormOpen(true);
@@ -306,7 +326,10 @@ export default function Invoices() {
     setFormError('');
 
     if (!formRecipient.trim()) {
-      setFormError('Nama Penerima / Donatur wajib diisi.');
+      const label = formType === 'Faktur' ? 'Nama Penerima / Donatur' :
+                    formType === 'Penerimaan' ? 'Nama Pengirim / Pembayar' :
+                    'Nama Penerima Dana';
+      setFormError(`${label} wajib diisi.`);
       return;
     }
 
@@ -327,9 +350,13 @@ export default function Invoices() {
           formItems,
           formTotalValue,
           formNotes,
-          formStatus
+          formStatus,
+          formType
         );
-        showToast('Berhasil memperbarui data faktur.');
+        const labelText = formType === 'Faktur' ? 'faktur' :
+                          formType === 'Penerimaan' ? 'kwitansi penerimaan' :
+                          'bukti kas pengeluaran';
+        showToast(`Berhasil memperbarui data ${labelText}.`);
       } else {
         await createInvoice(
           formNumber,
@@ -339,9 +366,13 @@ export default function Invoices() {
           formItems,
           formTotalValue,
           formNotes,
-          formStatus
+          formStatus,
+          formType
         );
-        showToast('Berhasil menyimpan faktur baru ke database.');
+        const labelText = formType === 'Faktur' ? 'faktur' :
+                          formType === 'Penerimaan' ? 'kwitansi penerimaan' :
+                          'bukti kas pengeluaran';
+        showToast(`Berhasil menyimpan ${labelText} baru ke database.`);
       }
       setIsFormOpen(false);
       loadData();
@@ -506,9 +537,12 @@ export default function Invoices() {
 
       pdf.addImage(imgData, 'PNG', margin, 12, imgWidth, imgHeight);
 
+      const pdfType = selectedInvoice?.id === inv.id ? previewType : (inv.type || 'Faktur');
+      const prefixClean = pdfType === 'Penerimaan' ? 'KWITANSI_MASUK' : pdfType === 'Pengeluaran' ? 'KAS_KELUAR' : 'FAKTUR';
+      const typeLabel = pdfType === 'Penerimaan' ? 'Kwitansi Masuk' : pdfType === 'Pengeluaran' ? 'Kas Keluar' : 'Faktur';
       const formattedNumClean = inv.invoiceNumber.replace(/\//g, '_');
-      pdf.save(`FAKTUR_${formattedNumClean}.pdf`);
-      showToast(`Dokumen digital Faktur ${inv.invoiceNumber} berhasil diunduh.`);
+      pdf.save(`${prefixClean}_${formattedNumClean}.pdf`);
+      showToast(`Dokumen digital ${typeLabel} ${inv.invoiceNumber} berhasil diunduh.`);
     } catch (err) {
       console.error("Gagal cetak invoice:", err);
       showToast("Gagal mencetak dokumen PDF.", "error");
@@ -664,11 +698,11 @@ export default function Invoices() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="bg-slate-55 bg-slate-50 border-b border-natural-border text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                  <th className="px-6 py-4">Nomor Faktur</th>
-                  <th className="px-6 py-4">Penerima / Donatur</th>
+                  <th className="px-6 py-4">Nomor Dokumen</th>
+                  <th className="px-6 py-4">Penerima / Donatur / Kontak</th>
                   <th className="px-6 py-4">Tanggal Penerbitan</th>
                   <th className="px-6 py-4">Status & Alur</th>
-                  <th className="px-6 py-4 text-right">Total Tagihan</th>
+                  <th className="px-6 py-4 text-right">Total Transaksi</th>
                   <th className="px-6 py-4"></th>
                 </tr>
               </thead>
@@ -677,8 +711,25 @@ export default function Invoices() {
                   <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <span className="font-bold text-slate-900 font-mono text-xs">{inv.invoiceNumber}</span>
+                      <span className={cn(
+                        "block text-[8.5px] font-bold mt-1 uppercase w-max px-1.5 py-0.5 rounded-md",
+                        inv.type === 'Penerimaan' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                        inv.type === 'Pengeluaran' ? "bg-rose-50 text-rose-700 border border-rose-100" :
+                        "bg-blue-50 text-blue-700 border border-blue-100"
+                      )}>
+                        {inv.type === 'Penerimaan' ? 'Kwitansi Masuk' :
+                         inv.type === 'Pengeluaran' ? 'Kas Keluar' :
+                         'Faktur'}
+                      </span>
                     </td>
-                    <td className="px-6 py-4 text-slate-700 font-semibold text-xs">{inv.recipient}</td>
+                    <td className="px-6 py-4">
+                      <div className="text-slate-700 font-semibold text-xs">{inv.recipient}</div>
+                      <div className="text-[9px] text-slate-400 font-medium">
+                        {inv.type === 'Penerimaan' ? 'Disetor Oleh' :
+                         inv.type === 'Pengeluaran' ? 'Diserahkan Ke' :
+                         'Ditagihkan Ke'}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 text-xs text-slate-500 font-mono">
                       {toJSDate(inv.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </td>
@@ -708,7 +759,7 @@ export default function Invoices() {
                       <div className="flex justify-end gap-2">
                         {/* Eye icon for detail preview */}
                         <button 
-                          onClick={() => { setSelectedInvoice(inv); setIsPreviewOpen(true); }}
+                          onClick={() => { setSelectedInvoice(inv); setPreviewType(inv.type || 'Faktur'); setIsPreviewOpen(true); }}
                           className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 cursor-pointer"
                           title="Pratinjau Cetak"
                         >
@@ -789,9 +840,12 @@ export default function Invoices() {
                   </div>
                   <div>
                     <h3 className="text-base font-bold text-slate-800">
-                      {editId ? `Ubah Faktur #${formNumber}` : 'Buat Faktur Baru'}
+                      {editId 
+                        ? `Ubah ${formType === 'Faktur' ? 'Faktur' : formType === 'Penerimaan' ? 'Kwitansi Masuk' : 'Bukti Kas Keluar'} #${formNumber}` 
+                        : `Buat ${formType === 'Faktur' ? 'Faktur' : formType === 'Penerimaan' ? 'Kwitansi Masuk' : 'Bukti Kas Keluar'} Baru`
+                      }
                     </h3>
-                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mt-0.5">Sistem Penerbitan Invoice Resmi</p>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-semibold mt-0.5">Sistem Penerbitan Dokumen Keuangan Resmi</p>
                   </div>
                 </div>
                 <button
@@ -812,26 +866,44 @@ export default function Invoices() {
                   </div>
                 )}
 
+                {/* Jenis Dokumen Selector */}
+                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Kategori Dokumen</span>
+                    <p className="text-[11px] text-slate-500 font-medium">Tentukan jenis bukti keuangan yang dicatat</p>
+                  </div>
+                  <div className="flex gap-1.5 w-full sm:w-auto">
+                    {(['Faktur', 'Penerimaan', 'Pengeluaran'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => handleTypeChange(t)}
+                        className={cn(
+                          "flex-1 sm:flex-initial px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border cursor-pointer",
+                          formType === t
+                            ? t === 'Faktur' ? "bg-blue-600 text-white border-blue-600 shadow-sm shadow-blue-100" :
+                              t === 'Penerimaan' ? "bg-emerald-600 text-white border-emerald-600 shadow-sm shadow-emerald-100" :
+                              "bg-rose-600 text-white border-rose-600 shadow-sm shadow-rose-100"
+                            : "bg-white hover:bg-slate-50 text-slate-605 border-slate-200"
+                        )}
+                      >
+                        {t === 'Faktur' ? 'Faktur' : t === 'Penerimaan' ? 'Kwitansi Masuk' : 'Kas Keluar'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Primary Meta Fields */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Nomor Faktur</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      {formType === 'Faktur' ? 'Nomor Faktur' : formType === 'Penerimaan' ? 'Nomor Bukti Kas Masuk (BKM)' : 'Nomor Bukti Kas Keluar (BKK)'}
+                    </label>
                     <input 
                       type="text"
                       disabled
                       value={formNumber}
                       className="w-full px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-mono text-xs cursor-not-allowed font-semibold focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Nama Penerima / Donatur</label>
-                    <input 
-                      type="text"
-                      placeholder="Masukkan nama donatur/institusi..."
-                      value={formRecipient}
-                      onChange={(e) => setFormRecipient(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-natural-primary text-xs"
                     />
                   </div>
 
@@ -845,21 +917,46 @@ export default function Invoices() {
                     />
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tanggal Jatuh Tempo</label>
+                  <div className={cn("space-y-1.5", formType === 'Faktur' ? "" : "md:col-span-2")}>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      {formType === 'Faktur' ? 'Nama Penerima / Donatur' :
+                       formType === 'Penerimaan' ? 'Diterima Dari (Instansi / Pribadi Pembayar)' :
+                       'Diserahkan Kepada (Nama Penerima Dana)'}
+                    </label>
                     <input 
-                      type="date"
-                      value={formDueDate}
-                      onChange={(e) => setFormDueDate(e.target.value)}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-natural-primary text-xs font-mono"
+                      type="text"
+                      placeholder={
+                        formType === 'Faktur' ? 'Masukkan nama donatur/institusi...' :
+                        formType === 'Penerimaan' ? 'Masukkan nama donatur atau pembayar...' :
+                        'Masukkan nama penerima kas/dana...'
+                      }
+                      value={formRecipient}
+                      onChange={(e) => setFormRecipient(e.target.value)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-natural-primary text-xs"
                     />
                   </div>
+
+                  {formType === 'Faktur' && (
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tanggal Jatuh Tempo</label>
+                      <input 
+                        type="date"
+                        value={formDueDate}
+                        onChange={(e) => setFormDueDate(e.target.value)}
+                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-natural-primary text-xs font-mono"
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* INVOICE DETAIL ITEMS */}
                 <div className="space-y-3 pt-3 border-t border-slate-100">
                   <div className="flex justify-between items-center">
-                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Daftar Keperluan / Item Yang Ditagihkan</label>
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      {formType === 'Faktur' ? 'Daftar Keperluan / Item Yang Ditagihkan' :
+                       formType === 'Penerimaan' ? 'Rincian Penerimaan Dana / Sumbangan' :
+                       'Rincian Pengeluaran Dana / Alokasi Kas'}
+                    </label>
                     <button
                       type="button"
                       onClick={addFormItem}
@@ -876,7 +973,11 @@ export default function Invoices() {
                           <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block sm:hidden">Deskripsi</span>
                           <input 
                             type="text"
-                            placeholder="Deskripsi tagihan (e.g., Iuran SPP, Sumbangan)..."
+                            placeholder={
+                              formType === 'Faktur' ? 'Deskripsi rincian (e.g., SPP, Donasi Masuk)...' :
+                              formType === 'Penerimaan' ? 'Keterangan donasi (e.g., Zakat Mal, Sedekah Dakwah)...' :
+                              'Peruntukan belanja (e.g., ATK Kantor, Biaya Logistik)...'
+                            }
                             value={item.description}
                             onChange={(e) => handleItemFieldChange(idx, 'description', e.target.value)}
                             className="w-full px-3 py-1.5 rounded-lg bg-white border border-slate-200 focus:outline-none text-xs"
@@ -1013,8 +1114,29 @@ export default function Invoices() {
                 </div>
               </div>
 
+              {/* Template switcher tabs */}
+              <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Format Dokumen Cetak:</span>
+                <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                  {(['Faktur', 'Penerimaan', 'Pengeluaran'] as const).map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => setPreviewType(t)}
+                      className={cn(
+                        "flex-1 sm:flex-initial px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer text-center",
+                        previewType === t
+                          ? "bg-white text-slate-800 shadow-sm"
+                          : "text-slate-500 hover:text-slate-700 font-medium"
+                      )}
+                    >
+                      {t === 'Faktur' ? 'Faktur Resmi' : t === 'Penerimaan' ? 'Kwitansi Masuk (BKM)' : 'Kas Keluar (BKK)'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {/* Printable Body Wrap */}
-              <div className="p-6 max-h-[65vh] overflow-y-auto bg-slate-100">
+              <div className="p-6 max-h-[60vh] overflow-y-auto bg-slate-100">
                 {/* Visual rendering simulation on white paper container */}
                 <div 
                   id="rendered-invoice-pdf-paper"
@@ -1030,9 +1152,13 @@ export default function Invoices() {
                   {/* Header Title Information */}
                   <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
                     <div className="space-y-1">
-                      <p className="font-bold text-sm uppercase text-slate-900 tracking-wider">FAKTUR TAGIHAN & BUKTI KAS</p>
+                      <p className="font-bold text-sm uppercase text-slate-900 tracking-wider">
+                        {previewType === 'Faktur' ? 'FAKTUR TAGIHAN & INVOICE' :
+                         previewType === 'Penerimaan' ? 'KWITANSI PENERIMAAN KAS' :
+                         'BUKTI PENGELUARAN KAS'}
+                      </p>
                       <p className="text-[9px] text-slate-500 flex items-center gap-1">
-                        <span>Nomor Faktur:</span>
+                        <span>Nomor Dokumen:</span>
                         <span className="font-mono font-bold text-slate-900 text-xs">{selectedInvoice.invoiceNumber}</span>
                       </p>
                       <p className="text-[9px] text-slate-500">
@@ -1047,18 +1173,32 @@ export default function Invoices() {
                     </div>
 
                     <div className="text-left sm:text-right text-[9px] text-slate-500 space-y-0.5 font-sans">
-                      <p>Tanggal Penerbitan: <span className="font-bold text-slate-900 font-mono text-xs">{toJSDate(selectedInvoice.date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span></p>
-                      <p>Jatuh Tempo: <span className="font-bold text-slate-900 font-mono text-xs">{toJSDate(selectedInvoice.dueDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span></p>
+                      <p>Tanggal Transaksi: <span className="font-bold text-slate-900 font-mono text-xs">{toJSDate(selectedInvoice.date).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span></p>
+                      {previewType === 'Faktur' && (
+                        <p>Jatuh Tempo: <span className="font-bold text-slate-900 font-mono text-xs">{toJSDate(selectedInvoice.dueDate).toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })}</span></p>
+                      )}
                     </div>
                   </div>
 
-                  {/* Recipient Box Info */}
-                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl">
-                    <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold block mb-1">DITAGIHKAN KEPADA / DONATUR:</span>
-                    <p className="font-bold text-sm text-slate-900">{selectedInvoice.recipient}</p>
-                    <p className="text-[10px] text-slate-400 mt-1 leading-relaxed">
-                      Instansi/Pribadi penyedia keuangan sosial yang terdaftar pada sistem akuntansi Sekolah Cendekia Baznas.
-                    </p>
+                  {/* Recipient / Payee / Payor Box Info */}
+                  <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4 text-xs font-sans">
+                      <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold min-w-[140px] block">
+                        {previewType === 'Faktur' ? 'Ditagihkan Kepada:' :
+                         previewType === 'Penerimaan' ? 'Telah Diterima Dari:' :
+                         'Dibayarkan Kepada:'}
+                      </span>
+                      <p className="font-bold text-sm text-slate-905">{selectedInvoice.recipient}</p>
+                    </div>
+
+                    {(previewType === 'Penerimaan' || previewType === 'Pengeluaran') && (
+                      <div className="flex flex-col sm:flex-row sm:items-start gap-1 sm:gap-4 pt-2.5 border-t border-slate-100 text-xs font-sans">
+                        <span className="text-[9px] uppercase tracking-wider text-slate-400 font-bold min-w-[140px] block pt-0.5">Uang Sejumlah (Terbilang):</span>
+                        <div className="flex-1 bg-emerald-50/50 border border-emerald-100 rounded-xl px-3 py-2 text-emerald-800 font-serif italic text-xs font-semibold leading-relaxed">
+                          " {terbilang(selectedInvoice.total)} "
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* Items Sub-table rendered */}
@@ -1066,7 +1206,11 @@ export default function Invoices() {
                     <thead>
                       <tr className="bg-slate-50 text-[9px] font-bold text-slate-700 uppercase tracking-wider border-b border-slate-200">
                         <th className="p-2.5 border-r border-slate-200 text-center w-8">No</th>
-                        <th className="p-2.5 border-r border-slate-200">Deskripsi Detail Keperluan / Rincian Tagihan</th>
+                        <th className="p-2.5 border-r border-slate-200">
+                          {previewType === 'Faktur' ? 'Deskripsi Detail Keperluan / Rincian Tagihan' :
+                           previewType === 'Penerimaan' ? 'Rincian Penerimaan Dana / Sumbangan' :
+                           'Rincian Penggunaan Dana / Pos Anggaran'}
+                        </th>
                         <th className="p-2.5 border-r border-slate-200 text-center w-12">Qty</th>
                         <th className="p-2.5 border-r border-slate-200 text-right w-28">Harga Satuan</th>
                         <th className="p-2.5 text-right w-28">Total Harga</th>
@@ -1092,7 +1236,7 @@ export default function Invoices() {
                   {/* Cumulative highlighting layout */}
                   <div className="flex justify-end pt-1">
                     <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-xl flex justify-between items-center gap-6 min-w-[220px]">
-                      <span className="text-[9px] uppercase font-bold text-slate-500">TOTAL KEKAYAAN:</span>
+                      <span className="text-[9px] uppercase font-bold text-slate-500">TOTAL TRANSAKSI:</span>
                       <span className="font-mono font-bold text-slate-900 text-base">
                         {formatRupiah(selectedInvoice.total)}
                       </span>
@@ -1102,8 +1246,8 @@ export default function Invoices() {
                   {/* Notes / Terms */}
                   {selectedInvoice.notes && (
                     <div className="pt-2 border-t border-slate-100">
-                      <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider font-sans block mb-1">Catatan Tambahan & Ketentuan:</span>
-                      <p className="text-[9px] text-slate-550 leading-relaxed font-sans bg-slate-50/50 p-2.5 border border-slate-150 rounded-xl whitespace-pre-line italic">
+                      <span className="text-[9px] font-bold uppercase text-slate-400 tracking-wider font-sans block mb-1">Keterangan / Catatan Tambahan:</span>
+                      <p className="text-[9px] text-slate-500 leading-relaxed font-sans bg-slate-50/50 p-2.5 border border-slate-150 rounded-xl whitespace-pre-line italic">
                         {selectedInvoice.notes}
                       </p>
                     </div>
@@ -1112,28 +1256,84 @@ export default function Invoices() {
                   {/* Warning / Disclaimers */}
                   <div className="pt-2">
                     <p className="text-[8px] text-slate-400 leading-relaxed font-sans italic">
-                      * Dokumen ini sah dan dikeluarkan secara elektronik dari basis data Sistem Informasi Akuntansi Sekolah Cendekia Baznas. Tanda tangan di bawah adalah representasi persetujuan administratif internal kepengurusan keuangan sekolah.
+                      * Dokumen ini sah dan dikeluarkan secara resmi dari basis data Sistem Informasi Akuntansi Sekolah Cendekia Baznas. Tanda tangan di bawah adalah representasi persetujuan administratif internal kepengurusan keuangan sekolah.
                     </p>
                   </div>
 
                   {/* Signatures */}
-                  <div className="grid grid-cols-2 gap-12 pt-8 text-center font-sans">
-                    <div className="space-y-14">
-                      <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest">Dibuat Oleh,</p>
-                      <div className="space-y-1">
-                        <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px]">
-                          {auth.currentUser?.email ? auth.currentUser.email.split('@')[0].toUpperCase() : 'BENDAHARA SEKOLAH'}
-                        </p>
-                        <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">Administrasi Keuangan</p>
-                      </div>
-                    </div>
-                    <div className="space-y-14">
-                      <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest">Mengetahui & Menyetujui,</p>
-                      <div className="space-y-1">
-                        <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px]">KEPALA SEKOLAH</p>
-                        <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold">Sekolah Cendekia Baznas</p>
-                      </div>
-                    </div>
+                  <div className={cn(
+                    "grid gap-12 pt-8 text-center font-sans",
+                    previewType === 'Pengeluaran' ? "grid-cols-3" : "grid-cols-2"
+                  )}>
+                    {previewType === 'Penerimaan' ? (
+                      <>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Penyetor / Pembayar,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">
+                              {selectedInvoice.recipient}
+                            </p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Pihak Luar / Donatur</p>
+                          </div>
+                        </div>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center font-mono">Penerima Kasir,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">
+                              {auth.currentUser?.email ? auth.currentUser.email.split('@')[0].toUpperCase() : 'BENDAHARA SEKOLAH'}
+                            </p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Keuangan SCB</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : previewType === 'Pengeluaran' ? (
+                      <>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Penerima Dana,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">
+                              {selectedInvoice.recipient}
+                            </p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Penerima Logistik</p>
+                          </div>
+                        </div>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Dibayar Oleh,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">
+                              {auth.currentUser?.email ? auth.currentUser.email.split('@')[0].toUpperCase() : 'BENDAHARA SEKOLAH'}
+                            </p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Bendahara Sekolah</p>
+                          </div>
+                        </div>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Disetujui,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">KEPALA SEKOLAH</p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Cendekia Baznas</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Dibuat Oleh,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">
+                              {auth.currentUser?.email ? auth.currentUser.email.split('@')[0].toUpperCase() : 'BENDAHARA SEKOLAH'}
+                            </p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Administrasi Keuangan</p>
+                          </div>
+                        </div>
+                        <div className="space-y-14">
+                          <p className="text-[9px] font-sans font-semibold text-slate-500 uppercase tracking-widest text-center">Mengetahui & Menyetujui,</p>
+                          <div className="space-y-1">
+                            <p className="font-bold border-b border-slate-400 pb-1 inline-block min-w-[130px] text-center">KEPALA SEKOLAH</p>
+                            <p className="text-[8px] text-slate-400 uppercase tracking-wider font-semibold text-center">Sekolah Cendekia Baznas</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
