@@ -59,7 +59,8 @@ export const createDebt = async (
   userId: string,
   isUangMuka: boolean = false,
   picName: string = '',
-  cashAccountId?: string
+  cashAccountId?: string,
+  schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum'
 ): Promise<string> => {
   try {
     const remainingBalance = isUangMuka ? totalAmount : (totalAmount - downPayment);
@@ -134,7 +135,8 @@ export const createDebt = async (
       lines,
       createdBy: userId,
       createdAt: Timestamp.now(),
-      picName: picName || ''
+      picName: picName || '',
+      schoolUnit
     });
 
     // 3. Save matching control monitoring sheet entry linking to the journal
@@ -157,7 +159,8 @@ export const createDebt = async (
       picName,
       dpRefNumber: refNum,
       cashAccountId: kasAccount?.id || '',
-      cashAccountName: kasAccount?.name || ''
+      cashAccountName: kasAccount?.name || '',
+      schoolUnit
     };
 
     const docRef = await addDoc(collection(db, COLLECTION_PATH), docData);
@@ -215,7 +218,8 @@ export const addDebtPayment = async (
       reference: currentData.type === 'Piutang' ? 'PT-BYR' : 'HT-BYR',
       lines,
       createdBy: currentData.createdBy,
-      createdAt: Timestamp.now()
+      createdAt: Timestamp.now(),
+      schoolUnit: currentData.schoolUnit || 'Umum'
     });
 
     // 3. Register payment history item linking to general ledger
@@ -262,6 +266,7 @@ export const updateDebtDetails = async (
     downPayment: number;
     remarks: string;
     picName?: string;
+    schoolUnit?: 'Umum' | 'SMP' | 'SMA';
   }
 ): Promise<void> => {
   const docRef = doc(db, COLLECTION_PATH, debtId);
@@ -328,12 +333,16 @@ export const updateDebtDetails = async (
           }
         }
 
-        await updateDoc(journalDocRef, {
+        const updateJournalPayload: any = {
           date: Timestamp.fromDate(updateData.date),
           description: isUangMuka ? `Disbursement Panjar/Uang Muka ke PIC: ${updateData.picName || 'Tanpa PIC'} (${updateData.remarks || 'Tanpa Keterangan'})` : `Kontrol ${type}: ${updateData.name} (${updateData.remarks || 'Tanpa Keterangan'})`,
           lines,
           picName: updateData.picName || ''
-        });
+        };
+        if (updateData.schoolUnit !== undefined) {
+          updateJournalPayload.schoolUnit = updateData.schoolUnit;
+        }
+        await updateDoc(journalDocRef, updateJournalPayload);
       }
     }
 
@@ -363,6 +372,10 @@ export const updateDebtDetails = async (
 
     if (updateData.picName !== undefined) {
       payload.picName = updateData.picName;
+    }
+
+    if (updateData.schoolUnit !== undefined) {
+      payload.schoolUnit = updateData.schoolUnit;
     }
 
     await updateDoc(docRef, payload);
@@ -533,7 +546,8 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           journalId,
           isUangMuka: isUM,
           picName: pic,
-          dpRefNumber: refNum
+          dpRefNumber: refNum,
+          schoolUnit: journalEntry.schoolUnit || 'Umum'
         });
       }
 
@@ -589,7 +603,8 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           createdAt: Timestamp.now(),
           journalId,
           picName: pic,
-          dpRefNumber: refNum
+          dpRefNumber: refNum,
+          schoolUnit: journalEntry.schoolUnit || 'Umum'
         });
       }
 

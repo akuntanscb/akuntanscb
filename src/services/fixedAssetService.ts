@@ -50,7 +50,8 @@ export const createFixedAsset = async (assetData: Omit<FixedAsset, 'id' | 'creat
       ...assetData,
       createdBy: userId,
       createdAt: Timestamp.now(),
-      depreciationHistory: []
+      depreciationHistory: [],
+      schoolUnit: (assetData as any).schoolUnit || 'Umum'
     };
     const docRef = await addDoc(collection(db, COLLECTION_NAME), docData);
     return docRef.id;
@@ -123,7 +124,10 @@ export const postAssetDepreciation = async (
       refNo,
       journalLines,
       userId,
-      deprDate
+      deprDate,
+      undefined,
+      undefined,
+      asset.schoolUnit || 'Umum'
     );
 
     // 2. Catat riwayat di dokumen aset tetap terkait

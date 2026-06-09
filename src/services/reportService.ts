@@ -6,7 +6,7 @@ export interface AccountBalance extends Account {
   balance: number;
 }
 
-export const getAccountBalances = async (): Promise<AccountBalance[]> => {
+export const getAccountBalances = async (schoolUnit?: string): Promise<AccountBalance[]> => {
   const accounts = await getAccounts();
   const entries = await getJournalEntries();
 
@@ -15,7 +15,11 @@ export const getAccountBalances = async (): Promise<AccountBalance[]> => {
     balances[acc.id] = acc.initialBalance || 0;
   });
 
-  entries.forEach(entry => {
+  const filteredEntries = schoolUnit && schoolUnit !== 'all' && schoolUnit !== 'Gabungan'
+    ? entries.filter(e => e.schoolUnit === schoolUnit)
+    : entries;
+
+  filteredEntries.forEach(entry => {
     entry.lines.forEach(line => {
       const acc = accounts.find(a => a.id === line.accountId);
       if (acc) {
@@ -37,8 +41,8 @@ export const getAccountBalances = async (): Promise<AccountBalance[]> => {
   }));
 };
 
-export const getFinancialReports = async () => {
-  const balances = await getAccountBalances();
+export const getFinancialReports = async (schoolUnit?: string) => {
+  const balances = await getAccountBalances(schoolUnit);
 
   const sortAccounts = (accs: AccountBalance[]) => {
     return [...accs].sort((a, b) => {
@@ -122,8 +126,11 @@ export const getFinancialReports = async () => {
   let penPengeluaranHutang = 0;
 
   const entries = await getJournalEntries();
+  const filteredEntriesForCashFlow = schoolUnit && schoolUnit !== 'all' && schoolUnit !== 'Gabungan'
+    ? entries.filter(e => e.schoolUnit === schoolUnit)
+    : entries;
 
-  entries.forEach(entry => {
+  filteredEntriesForCashFlow.forEach(entry => {
     let cashDebit = 0;
     let cashCredit = 0;
 

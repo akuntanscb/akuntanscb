@@ -12,7 +12,8 @@ export const createJournalEntry = async (
   userId: string,
   date: Date = new Date(),
   picName?: string,
-  dpRefNumber?: string
+  dpRefNumber?: string,
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum'
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum + line.credit, 0);
@@ -24,7 +25,7 @@ export const createJournalEntry = async (
   const path = 'journal_entries';
   try {
     const createdAtTime = Timestamp.now();
-    const docRef = await addDoc(collection(db, path), {
+    const docData: any = {
       date: Timestamp.fromDate(date),
       description,
       reference,
@@ -32,8 +33,10 @@ export const createJournalEntry = async (
       createdBy: userId,
       createdAt: createdAtTime,
       picName: picName || '',
-      dpRefNumber: dpRefNumber || ''
-    });
+      dpRefNumber: dpRefNumber || '',
+      schoolUnit: schoolUnit || 'Umum'
+    };
+    const docRef = await addDoc(collection(db, path), docData);
 
     const journalId = docRef.id;
     try {
@@ -46,7 +49,8 @@ export const createJournalEntry = async (
         createdBy: userId,
         createdAt: createdAtTime,
         picName: picName || '',
-        dpRefNumber: dpRefNumber || ''
+        dpRefNumber: dpRefNumber || '',
+        schoolUnit: schoolUnit || 'Umum'
       });
     } catch (syncErr) {
       console.error("Gagal melakukan sinkronisasi kontrol hutang piutang:", syncErr);
@@ -101,7 +105,8 @@ export const updateJournalEntry = async (
   createdBy: string,
   createdAt: any,
   picName?: string,
-  dpRefNumber?: string
+  dpRefNumber?: string,
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum'
 ) => {
   const totalDebit = lines.reduce((sum, line) => sum + line.debit, 0);
   const totalCredit = lines.reduce((sum, line) => sum+ line.credit, 0);
@@ -121,7 +126,8 @@ export const updateJournalEntry = async (
       createdBy,
       createdAt,
       picName: picName || '',
-      dpRefNumber: dpRefNumber || ''
+      dpRefNumber: dpRefNumber || '',
+      schoolUnit: schoolUnit || 'Umum'
     });
 
     try {
@@ -134,7 +140,8 @@ export const updateJournalEntry = async (
         createdBy,
         createdAt,
         picName: picName || '',
-        dpRefNumber: dpRefNumber || ''
+        dpRefNumber: dpRefNumber || '',
+        schoolUnit: schoolUnit || 'Umum'
       });
     } catch (syncErr) {
       console.error("Gagal memperbarui sinkronisasi kontrol hutang piutang:", syncErr);

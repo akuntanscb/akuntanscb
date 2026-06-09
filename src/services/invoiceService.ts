@@ -83,7 +83,8 @@ export const createInvoice = async (
   total: number,
   notes: string,
   status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled' = 'Draft',
-  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur'
+  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur',
+  schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum'
 ): Promise<string> => {
   try {
     if (!auth.currentUser) throw new Error('User not authenticated');
@@ -99,7 +100,8 @@ export const createInvoice = async (
       status,
       type,
       createdBy: auth.currentUser.uid,
-      createdAt: Timestamp.now()
+      createdAt: Timestamp.now(),
+      schoolUnit
     };
     
     const docRef = await addDoc(collection(db, COLLECTION_PATH), payload);
@@ -119,7 +121,8 @@ export const updateInvoice = async (
   total: number,
   notes: string,
   status: 'Draft' | 'Sent' | 'Paid' | 'Cancelled',
-  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur'
+  type: 'Faktur' | 'Penerimaan' | 'Pengeluaran' = 'Faktur',
+  schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum'
 ): Promise<void> => {
   try {
     const docRef = doc(db, COLLECTION_PATH, id);
@@ -132,6 +135,7 @@ export const updateInvoice = async (
       notes,
       status,
       type,
+      schoolUnit,
       updatedAt: Timestamp.now()
     });
   } catch (error) {

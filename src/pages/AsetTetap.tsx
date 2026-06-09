@@ -36,6 +36,7 @@ export default function AsetTetap() {
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'Semua' | 'Aktif' | 'Dilepas'>('Semua');
+  const [unitFilter, setUnitFilter] = useState<'all' | 'SMP' | 'SMA' | 'Umum'>('all');
 
   // Modal states
   const [isAddEditOpen, setIsAddEditOpen] = useState<boolean>(false);
@@ -59,6 +60,7 @@ export default function AsetTetap() {
   const [formDeprExpenseAccount, setFormDeprExpenseAccount] = useState<string>('');
   const [formAccumDeprAccount, setFormAccumDeprAccount] = useState<string>('');
   const [formRemarks, setFormRemarks] = useState<string>('');
+  const [formSchoolUnit, setFormSchoolUnit] = useState<'SMP' | 'SMA' | 'Umum'>('Umum');
   const [formError, setFormError] = useState<string>('');
 
   // Form states for Posting Depreciation
@@ -180,7 +182,9 @@ export default function AsetTetap() {
     let netBookValue = 0;
     let activeAssetsCount = 0;
 
-    assets.forEach(a => {
+    const targetedAssets = unitFilter === 'all' ? assets : assets.filter(a => (a.schoolUnit || 'Umum') === unitFilter);
+
+    targetedAssets.forEach(a => {
       if (a.status === 'Aktif') {
         originalCost += a.purchaseCost;
         const actualAccum = a.depreciationHistory.reduce((sum, log) => sum + log.amount, 0);
@@ -206,6 +210,7 @@ export default function AsetTetap() {
     setFormResidualValue(0);
     setFormMethod('straight_line');
     setFormRemarks('');
+    setFormSchoolUnit('Umum');
     setFormError('');
 
     // Pre-populate accounts smart guess
@@ -234,6 +239,7 @@ export default function AsetTetap() {
     setFormDeprExpenseAccount(asset.deprExpenseAccountId);
     setFormAccumDeprAccount(asset.accumDeprAccountId);
     setFormRemarks(asset.remarks || '');
+    setFormSchoolUnit(asset.schoolUnit || 'Umum');
     setFormError('');
 
     setIsAddEditOpen(true);
@@ -275,6 +281,7 @@ export default function AsetTetap() {
       accumDeprAccountName: selectedAccumAcc?.name || 'Akumulasi Penyusutan',
       status: (formId ? assets.find(a => a.id === formId)?.status : 'Aktif') || 'Aktif',
       remarks: formRemarks,
+      schoolUnit: formSchoolUnit,
     } as any;
 
     try {
@@ -455,8 +462,9 @@ export default function AsetTetap() {
                           (item.remarks && item.remarks.toLowerCase().includes(searchQuery.toLowerCase()));
 
     const matchesStatus = statusFilter === 'Semua' || item.status === statusFilter;
+    const matchesUnit = unitFilter === 'all' || (item.schoolUnit || 'Umum') === unitFilter;
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesUnit;
   });
 
   return (
@@ -568,6 +576,18 @@ export default function AsetTetap() {
                 </button>
               ))}
             </div>
+
+            {/* School Unit Filter */}
+            <select
+              value={unitFilter}
+              onChange={(e) => setUnitFilter(e.target.value as any)}
+              className="bg-white border border-natural-border rounded-xl px-3 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer font-bold shrink-0"
+            >
+              <option value="all">Unit: Konsolidasi</option>
+              <option value="SMP">Unit: SMP</option>
+              <option value="SMA">Unit: SMA</option>
+              <option value="Umum">Unit: Umum</option>
+            </select>
           </div>
 
           {/* Right action button */}
@@ -618,6 +638,14 @@ export default function AsetTetap() {
                           <div className="flex items-center gap-2">
                             <span className="font-mono text-[9px] font-bold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200">
                               {asset.code}
+                            </span>
+                            <span className={cn(
+                              "text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border leading-none font-sans",
+                              (asset.schoolUnit || 'Umum') === 'SMP' ? "bg-sky-50 text-sky-700 border-sky-100" :
+                              (asset.schoolUnit || 'Umum') === 'SMA' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                              "bg-slate-50 text-slate-600 border-slate-200"
+                            )}>
+                              {asset.schoolUnit || 'Umum'}
                             </span>
                             <span className={cn(
                               "text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border leading-none font-sans",
@@ -779,6 +807,20 @@ export default function AsetTetap() {
                       placeholder="AST-0001"
                       className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary"
                     />
+                  </div>
+
+                  {/* Unit Sekolah Select */}
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">Unit Sekolah</label>
+                    <select
+                      value={formSchoolUnit}
+                      onChange={(e) => setFormSchoolUnit(e.target.value as any)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer"
+                    >
+                      <option value="Umum">Umum (Gabungan)</option>
+                      <option value="SMP">SMP</option>
+                      <option value="SMA">SMA</option>
+                    </select>
                   </div>
 
                   {/* Name */}

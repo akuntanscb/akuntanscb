@@ -138,6 +138,7 @@ export default function Reports() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'neraca' | 'aktivitas' | 'arusKas' | 'calk'>('neraca');
+  const [selectedUnit, setSelectedUnit] = useState<'all' | 'SMP' | 'SMA' | 'Umum'>('all');
 
   // Layout Configuration states
   const [isLayoutEditorOpen, setIsLayoutEditorOpen] = useState(false);
@@ -161,11 +162,11 @@ export default function Reports() {
     setCalkCatatanTambahan(localStorage.getItem('calk_catatan') || 
       `1. Sekolah Cendekia Baznas (SCB) mempersiapkan laporan keuangan sesuai dengan PSAK 45 / ISAK 35 tentang Pelaporan Keuangan Entitas Nir Laba.\n2. Sumber pendanaan utama sekolah bersumber dari penyaluran Dana ZIS (Zakat, Infak, Sedekah) yang dikelola oleh BAZNAS Pusat.\n3. Saldo Aset Neto Sekolah di akhir tahun berjalan menunjukkan rasio likuiditas yang sehat guna mendukung beasiswa penuh bagi seluruh santri dhuafa.`
     );
-  }, []);
+  }, [selectedUnit]);
 
   const fetchData = async () => {
     setLoading(true);
-    const reports = await getFinancialReports();
+    const reports = await getFinancialReports(selectedUnit);
     setData(reports);
     setLoading(false);
   };
@@ -594,15 +595,26 @@ export default function Reports() {
   };
 
   if (loading) return <div className="flex items-center justify-center h-full">Memuat Laporan...</div>;
-
   return (
     <div className="space-y-8">
       <div className="flex justify-between items-center bg-white/40 p-1 rounded-2xl print:hidden">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Laporan Keuangan</h1>
-          <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Laporan otomatis berbasis posting jurnal</p>
+          <p className="text-xs text-gray-450 uppercase tracking-widest mt-1 text-slate-400">Laporan otomatis berbasis posting jurnal</p>
         </div>
         <div className="flex gap-3 items-center">
+          {/* School Unit Filter Selection */}
+          <select
+            value={selectedUnit}
+            onChange={(e) => setSelectedUnit(e.target.value as any)}
+            className="px-4 py-2.5 bg-white border border-natural-border rounded-xl text-xs text-slate-700 font-bold cursor-pointer focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-sm"
+          >
+            <option value="all">Unit: Konsolidasi (Gabungan)</option>
+            <option value="SMP">Unit: SMP</option>
+            <option value="SMA">Unit: SMA</option>
+            <option value="Umum">Unit: Umum</option>
+          </select>
+
           <button
             onClick={openLayoutEditor}
             className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none"
@@ -695,7 +707,9 @@ export default function Reports() {
 
       <div id="report-print-area" className="bg-white rounded-[2rem] border border-natural-border shadow-sm p-12 print:p-0 print:border-none print:shadow-none">
         <div className="text-center mb-16 space-y-2">
-          <h2 className="text-2xl font-serif text-natural-primary uppercase tracking-tight">Sekolah Cendekia Baznas</h2>
+          <h2 className="text-2xl font-serif text-natural-primary uppercase tracking-tight">
+            Sekolah Cendekia Baznas {selectedUnit !== 'all' && `(${selectedUnit})`}
+          </h2>
           <p className="text-gray-400 uppercase tracking-[0.2em] text-xs font-bold">
             {activeTab === 'neraca' 
               ? 'LAPORAN POSISI KEUANGAN (NERACA)' 

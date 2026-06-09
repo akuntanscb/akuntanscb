@@ -62,6 +62,7 @@ export default function Journal() {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [picName, setPicName] = useState('');
   const [selectedDpRef, setSelectedDpRef] = useState('');
+  const [schoolUnit, setSchoolUnit] = useState<'SMP' | 'SMA' | 'Umum'>('Umum');
   const [lines, setLines] = useState<JournalLine[]>([
     { accountId: '', accountName: '', debit: 0, credit: 0 },
     { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -82,6 +83,7 @@ export default function Journal() {
   const [filterAccount, setFilterAccount] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
+  const [filterSchoolUnit, setFilterSchoolUnit] = useState<'all' | 'SMP' | 'SMA' | 'Umum'>('all');
 
   // Bulk Delete States
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
@@ -94,6 +96,7 @@ export default function Journal() {
     setFilterAccount('');
     setFilterStartDate('');
     setFilterEndDate('');
+    setFilterSchoolUnit('all');
   };
 
   const handleToggleSelectEntry = (id: string) => {
@@ -111,6 +114,7 @@ export default function Journal() {
     setReference('');
     setPicName('');
     setSelectedDpRef('');
+    setSchoolUnit('Umum');
     setDate(format(new Date(), 'yyyy-MM-dd'));
     setLines([
       { accountId: '', accountName: '', debit: 0, credit: 0 },
@@ -159,6 +163,7 @@ export default function Journal() {
     setReference(entry.reference);
     setPicName((entry as any).picName || '');
     setSelectedDpRef((entry as any).dpRefNumber || '');
+    setSchoolUnit(entry.schoolUnit || 'Umum');
     setDate(format(entry.date.toDate(), 'yyyy-MM-dd'));
     setLines(entry.lines.map(line => ({
       accountId: line.accountId,
@@ -211,10 +216,11 @@ export default function Journal() {
           editingEntry.createdBy,
           editingEntry.createdAt,
           picName,
-          selectedDpRef
+          selectedDpRef,
+          schoolUnit
         );
       } else {
-        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef);
+        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
       }
       
       handleCancelForm();
@@ -265,6 +271,12 @@ export default function Journal() {
       if (filterEndDate && dateStr > filterEndDate) {
         return false;
       }
+    }
+
+    // 4. School Unit Filter
+    if (filterSchoolUnit !== 'all') {
+      const entryUnit = entry.schoolUnit || 'Umum';
+      if (entryUnit !== filterSchoolUnit) return false;
     }
 
     return true;
@@ -1132,7 +1144,7 @@ export default function Journal() {
               )}
             </AnimatePresence>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Tanggal</label>
                 <input 
@@ -1151,6 +1163,18 @@ export default function Journal() {
                   onChange={(e) => setReference(e.target.value)}
                   className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
                 />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">Unit Sekolah</label>
+                <select
+                  value={schoolUnit}
+                  onChange={(e) => setSchoolUnit(e.target.value as any)}
+                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 bg-white transition-colors cursor-pointer"
+                >
+                  <option value="Umum">Umum</option>
+                  <option value="SMP">SMP</option>
+                  <option value="SMA">SMA</option>
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Keterangan</label>
@@ -1291,7 +1315,7 @@ export default function Journal() {
           </div>
 
           {/* Account Filter */}
-          <div className="w-full md:w-64 space-y-1">
+          <div className="w-full md:w-56 space-y-1">
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter Akun</span>
             <select
               value={filterAccount}
@@ -1302,6 +1326,21 @@ export default function Journal() {
               {accounts.sort((a,b) => a.code.localeCompare(b.code)).map(acc => (
                 <option key={acc.id} value={acc.id}>{acc.code} - {acc.name}</option>
               ))}
+            </select>
+          </div>
+
+          {/* Unit Filter */}
+          <div className="w-full md:w-36 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Unit Sekolah</span>
+            <select
+              value={filterSchoolUnit}
+              onChange={(e) => setFilterSchoolUnit(e.target.value as any)}
+              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
+            >
+              <option value="all">Consolidated</option>
+              <option value="SMP">SMP</option>
+              <option value="SMA">SMA</option>
+              <option value="Umum">Umum</option>
             </select>
           </div>
 
@@ -1328,7 +1367,7 @@ export default function Journal() {
           </div>
 
           {/* Reset Filters */}
-          {(filterText || filterAccount || filterStartDate || filterEndDate) && (
+          {(filterText || filterAccount || filterStartDate || filterEndDate || filterSchoolUnit !== 'all') && (
             <button
               onClick={handleResetFilters}
               className="px-4 py-2 bg-slate-50 border border-slate-205 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1.5 h-[38px] shrink-0 cursor-pointer"
@@ -1428,11 +1467,27 @@ export default function Journal() {
                         {lIdx === 0 ? (
                           <div>
                             <div>{entry.description}</div>
-                            {(entry as any).picName && (
-                              <div className="mt-1 text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-2 py-0.5 rounded-full inline-flex items-center gap-1 font-semibold uppercase tracking-wider">
-                                PIC: {(entry as any).picName}
-                              </div>
-                            )}
+                            <div className="flex flex-wrap gap-1.5 mt-1.5">
+                              {entry.schoolUnit && entry.schoolUnit !== 'Umum' ? (
+                                <span className={cn(
+                                  "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border",
+                                  entry.schoolUnit === 'SMP' 
+                                    ? "bg-sky-50 text-sky-700 border-sky-150" 
+                                    : "bg-indigo-50 text-indigo-700 border-indigo-150"
+                                )}>
+                                  {entry.schoolUnit}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] bg-slate-50 text-slate-600 border border-slate-150 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                  Umum
+                                </span>
+                              )}
+                              {(entry as any).picName && (
+                                <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider inline-flex items-center gap-1">
+                                  PIC: {(entry as any).picName}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         ) : ''}
                       </td>

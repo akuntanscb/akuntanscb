@@ -154,6 +154,7 @@ export default function Invoices() {
   // Search & Filters
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Draft' | 'Sent' | 'Paid' | 'Cancelled'>('All');
+  const [unitFilter, setUnitFilter] = useState<'All' | 'SMP' | 'SMA' | 'Umum'>('All');
   
   // Custom Toast States
   const [toastMessage, setToastMessage] = useState<string>('');
@@ -180,6 +181,7 @@ export default function Invoices() {
     { description: '', quantity: 1, price: 0, amount: 0 }
   ]);
   const [formType, setFormType] = useState<'Faktur' | 'Penerimaan' | 'Pengeluaran'>('Faktur');
+  const [formSchoolUnit, setFormSchoolUnit] = useState<'SMP' | 'SMA' | 'Umum'>('Umum');
 
   // Preview Modal States
   const [isPreviewOpen, setIsPreviewOpen] = useState<boolean>(false);
@@ -290,6 +292,7 @@ export default function Invoices() {
     setFormNotes('');
     setFormStatus('Draft');
     setFormType('Faktur');
+    setFormSchoolUnit('Umum');
     setFormItems([{ description: '', quantity: 1, price: 0, amount: 0 }]);
     setFormError('');
     
@@ -315,6 +318,7 @@ export default function Invoices() {
     setFormNotes(inv.notes || '');
     setFormStatus(inv.status);
     setFormType(inv.type || 'Faktur');
+    setFormSchoolUnit(inv.schoolUnit || 'Umum');
     setFormItems(inv.items && inv.items.length > 0 ? inv.items : [{ description: '', quantity: 1, price: 0, amount: 0 }]);
     setFormError('');
     setIsFormOpen(true);
@@ -351,7 +355,8 @@ export default function Invoices() {
           formTotalValue,
           formNotes,
           formStatus,
-          formType
+          formType,
+          formSchoolUnit
         );
         const labelText = formType === 'Faktur' ? 'faktur' :
                           formType === 'Penerimaan' ? 'kwitansi penerimaan' :
@@ -367,7 +372,8 @@ export default function Invoices() {
           formTotalValue,
           formNotes,
           formStatus,
-          formType
+          formType,
+          formSchoolUnit
         );
         const labelText = formType === 'Faktur' ? 'faktur' :
                           formType === 'Penerimaan' ? 'kwitansi penerimaan' :
@@ -574,10 +580,11 @@ export default function Invoices() {
         inv.recipient.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchStatus = statusFilter === 'All' ? true : inv.status === statusFilter;
+      const matchUnit = unitFilter === 'All' ? true : (inv.schoolUnit || 'Umum') === unitFilter;
       
-      return matchSearch && matchStatus;
+      return matchSearch && matchStatus && matchUnit;
     });
-  }, [invoices, searchTerm, statusFilter]);
+  }, [invoices, searchTerm, statusFilter, unitFilter]);
 
   // Overall Financial stats calculating
   const stats = useMemo(() => {
@@ -585,7 +592,9 @@ export default function Invoices() {
     let totalUnpaid = 0;
     let totalPaid = 0;
 
-    invoices.forEach(inv => {
+    const targetList = unitFilter === 'All' ? invoices : invoices.filter(i => (i.schoolUnit || 'Umum') === unitFilter);
+
+    targetList.forEach(inv => {
       totalInvoiced += inv.total || 0;
       if (inv.status === 'Paid') {
         totalPaid += inv.total || 0;
@@ -645,8 +654,8 @@ export default function Invoices() {
       </div>
 
       {/* SEARCH AND FILTERS */}
-      <div className="bg-white p-4 rounded-3xl border border-natural-border shadow-sm flex flex-col md:flex-row gap-4 items-center">
-        <div className="relative w-full md:flex-1">
+      <div className="bg-white p-4 rounded-3xl border border-natural-border shadow-sm flex flex-col lg:flex-row gap-4 items-center justify-between">
+        <div className="relative w-full lg:max-w-xs shrink-0">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input 
             type="text"
@@ -657,22 +666,44 @@ export default function Invoices() {
           />
         </div>
         
-        {/* Status filters scrollable on mobile */}
-        <div className="flex gap-1.5 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 scrollbar-none">
-          {(['All', 'Draft', 'Sent', 'Paid', 'Cancelled'] as const).map((filter) => (
-            <button
-              key={filter}
-              onClick={() => setStatusFilter(filter)}
-              className={cn(
-                "px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer",
-                statusFilter === filter
-                  ? "bg-natural-primary text-white"
-                  : "bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-200"
-              )}
-            >
-              {filter === 'All' ? 'Semua Faktur' : filter.toUpperCase()}
-            </button>
-          ))}
+        <div className="flex flex-wrap lg:flex-nowrap gap-3 items-center w-full lg:w-auto overflow-x-auto pb-1 lg:pb-0 scrollbar-none">
+          {/* Unit filters */}
+          <div className="flex gap-1.5 shrink-0">
+            {(['All', 'SMP', 'SMA', 'Umum'] as const).map((u) => (
+              <button
+                key={u}
+                onClick={() => setUnitFilter(u)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all border cursor-pointer",
+                  unitFilter === u
+                    ? "bg-slate-800 text-white border-slate-800 font-bold"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                )}
+              >
+                {u === 'All' ? 'Consolidated' : u}
+              </button>
+            ))}
+          </div>
+
+          <div className="h-5 w-px bg-slate-200 hidden lg:block"></div>
+
+          {/* Status filters scrollable on mobile */}
+          <div className="flex gap-1.5 shrink-0">
+            {(['All', 'Draft', 'Sent', 'Paid', 'Cancelled'] as const).map((filter) => (
+              <button
+                key={filter}
+                onClick={() => setStatusFilter(filter)}
+                className={cn(
+                  "px-4 py-2 rounded-xl text-xs font-semibold whitespace-nowrap transition-all cursor-pointer border",
+                  statusFilter === filter
+                    ? "bg-natural-primary text-white border-natural-primary"
+                    : "bg-slate-50 hover:bg-slate-100 text-slate-600 border-slate-200"
+                )}
+              >
+                {filter === 'All' ? 'Semua Faktur' : filter.toUpperCase()}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -711,16 +742,27 @@ export default function Invoices() {
                   <tr key={inv.id} className="hover:bg-slate-50/50 transition-colors">
                     <td className="px-6 py-4">
                       <span className="font-bold text-slate-900 font-mono text-xs">{inv.invoiceNumber}</span>
-                      <span className={cn(
-                        "block text-[8.5px] font-bold mt-1 uppercase w-max px-1.5 py-0.5 rounded-md",
-                        inv.type === 'Penerimaan' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
-                        inv.type === 'Pengeluaran' ? "bg-rose-50 text-rose-700 border border-rose-100" :
-                        "bg-blue-50 text-blue-700 border border-blue-100"
-                      )}>
-                        {inv.type === 'Penerimaan' ? 'Kwitansi Masuk' :
-                         inv.type === 'Pengeluaran' ? 'Kas Keluar' :
-                         'Faktur'}
-                      </span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        <span className={cn(
+                          "text-[8.5px] font-bold uppercase w-max px-1.5 py-0.5 rounded-md",
+                          inv.type === 'Penerimaan' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" :
+                          inv.type === 'Pengeluaran' ? "bg-rose-50 text-rose-700 border border-rose-100" :
+                          "bg-blue-50 text-blue-700 border border-blue-100"
+                        )}>
+                          {inv.type === 'Penerimaan' ? 'Kwitansi Masuk' :
+                           inv.type === 'Pengeluaran' ? 'Kas Keluar' :
+                           'Faktur'}
+                        </span>
+                        
+                        <span className={cn(
+                          "text-[8.5px] font-bold uppercase w-max px-1.5 py-0.5 rounded-md border",
+                          (inv.schoolUnit || 'Umum') === 'SMP' ? "bg-sky-50 text-sky-700 border-sky-100" :
+                          (inv.schoolUnit || 'Umum') === 'SMA' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                          "bg-slate-50 text-slate-700 border-slate-100"
+                        )}>
+                          {inv.schoolUnit || 'Umum'}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="text-slate-700 font-semibold text-xs">{inv.recipient}</div>
@@ -894,7 +936,7 @@ export default function Invoices() {
                 </div>
 
                 {/* Primary Meta Fields */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="space-y-1.5">
                     <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                       {formType === 'Faktur' ? 'Nomor Faktur' : formType === 'Penerimaan' ? 'Nomor Bukti Kas Masuk (BKM)' : 'Nomor Bukti Kas Keluar (BKK)'}
@@ -905,6 +947,19 @@ export default function Invoices() {
                       value={formNumber}
                       className="w-full px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-500 font-mono text-xs cursor-not-allowed font-semibold focus:outline-none"
                     />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Unit Sekolah</label>
+                    <select
+                      value={formSchoolUnit}
+                      onChange={(e) => setFormSchoolUnit(e.target.value as any)}
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-slate-200 focus:outline-none focus:border-natural-primary text-xs cursor-pointer"
+                    >
+                      <option value="Umum">Umum (Gabungan)</option>
+                      <option value="SMP">SMP</option>
+                      <option value="SMA">SMA</option>
+                    </select>
                   </div>
 
                   <div className="space-y-1.5">

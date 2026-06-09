@@ -158,6 +158,7 @@ export default function HutangPiutang() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterType, setFilterType] = useState<'All' | 'Hutang' | 'Piutang'>('All');
   const [filterStatus, setFilterStatus] = useState<string>('All'); // All, Lunas, Belum Lunas, Sebagian, Overdue
+  const [unitFilter, setUnitFilter] = useState<'All' | 'SMP' | 'SMA' | 'Umum'>('All');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'remaining-desc' | 'dueDate-asc'>('date-desc');
 
   // Modals state
@@ -190,6 +191,7 @@ export default function HutangPiutang() {
   const [editId, setEditId] = useState<string | null>(null);
   const [isUangMuka, setIsUangMuka] = useState<boolean>(false);
   const [picName, setPicName] = useState<string>('');
+  const [formSchoolUnit, setFormSchoolUnit] = useState<'SMP' | 'SMA' | 'Umum'>('Umum');
 
   // Form Fields for Payment
   const [payDate, setPayDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -290,7 +292,9 @@ export default function HutangPiutang() {
     let aging61to90 = 0;
     let agingAbove90 = 0;
 
-    debts.forEach((d) => {
+    const targetedDebts = unitFilter === 'All' ? debts : debts.filter(d => (d.schoolUnit || 'Umum') === unitFilter);
+
+    targetedDebts.forEach((d) => {
       const activePending = d.status !== 'Lunas';
       totalDp += d.downPayment || 0;
 
@@ -334,7 +338,7 @@ export default function HutangPiutang() {
       aging61to90,
       agingAbove90
     };
-  }, [debts]);
+  }, [debts, unitFilter]);
 
   // Handle Save (Add/Edit)
   const handleSaveDebt = async (e: React.FormEvent) => {
@@ -367,7 +371,7 @@ export default function HutangPiutang() {
       const dDate = new Date(formDate);
       const dDueDate = new Date(formDueDate);
 
-      if (editId) {
+       if (editId) {
         await updateDebtDetails(editId, {
           name: formName,
           date: dDate,
@@ -375,7 +379,8 @@ export default function HutangPiutang() {
           totalAmount: formTotal,
           downPayment: isUangMuka ? 0 : formDownPayment,
           remarks: formRemarks,
-          picName: isUangMuka ? picName : ''
+          picName: isUangMuka ? picName : '',
+          schoolUnit: formSchoolUnit
         });
         showToast('Berhasil mengubah data transaksi.');
       } else {
@@ -390,7 +395,8 @@ export default function HutangPiutang() {
           userId,
           isUangMuka,
           isUangMuka ? picName : '',
-          formCashAccountId
+          formCashAccountId,
+          formSchoolUnit
         );
         showToast('Berhasil mencatat transaksi hutang-piutang baru.');
       }
@@ -416,6 +422,7 @@ export default function HutangPiutang() {
     setEditId(null);
     setIsUangMuka(false);
     setPicName('');
+    setFormSchoolUnit('Umum');
     setFormError('');
     if (cashAccounts.length > 0) {
       setFormCashAccountId(cashAccounts[0].id);
@@ -434,6 +441,7 @@ export default function HutangPiutang() {
     setFormRemarks(debt.remarks || '');
     setIsUangMuka(!!debt.isUangMuka);
     setPicName((debt as any).picName || '');
+    setFormSchoolUnit(debt.schoolUnit || 'Umum');
     if (debt.cashAccountId) {
       setFormCashAccountId(debt.cashAccountId);
     }
@@ -747,6 +755,7 @@ export default function HutangPiutang() {
                              ((d as any).picName && (d as any).picName.toLowerCase().includes(searchQuery.toLowerCase()));
         
         const matchesType = filterType === 'All' ? true : d.type === filterType;
+        const matchesUnit = unitFilter === 'All' ? true : (d.schoolUnit || 'Umum') === unitFilter;
         
         let matchesStatus = true;
         if (filterStatus === 'Lunas') matchesStatus = d.status === 'Lunas';
@@ -754,7 +763,7 @@ export default function HutangPiutang() {
         else if (filterStatus === 'Sebagian') matchesStatus = d.status === 'Sebagian';
         else if (filterStatus === 'Overdue') matchesStatus = isOverdue(d);
 
-        return matchesQuery && matchesType && matchesStatus;
+        return matchesQuery && matchesType && matchesStatus && matchesUnit;
       })
       .sort((a, b) => {
         if (sortBy === 'date-desc') {
@@ -768,7 +777,7 @@ export default function HutangPiutang() {
         }
         return 0;
       });
-  }, [debts, searchQuery, filterType, filterStatus, sortBy]);
+  }, [debts, searchQuery, filterType, filterStatus, sortBy, unitFilter]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -968,6 +977,18 @@ export default function HutangPiutang() {
             ))}
           </div>
 
+          {/* Unit Filter */}
+          <select
+            value={unitFilter}
+            onChange={(e) => setUnitFilter(e.target.value as any)}
+            className="bg-white border border-natural-border rounded-xl px-3 py-1.5 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer font-bold"
+          >
+            <option value="All">Unit: Consolidated</option>
+            <option value="SMP">Unit: SMP</option>
+            <option value="SMA">Unit: SMA</option>
+            <option value="Umum">Unit: Umum</option>
+          </select>
+
           {/* Status Filter */}
           <select
             value={filterStatus}
@@ -1037,6 +1058,14 @@ export default function HutangPiutang() {
                             item.type === 'Piutang' ? "bg-emerald-50 text-emerald-700 border border-emerald-100" : "bg-amber-50 text-amber-700 border border-amber-100"
                           )}>
                             {item.type}
+                          </span>
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[9px] font-bold uppercase border",
+                            (item.schoolUnit || 'Umum') === 'SMP' ? "bg-sky-50 text-sky-700 border-sky-100" :
+                            (item.schoolUnit || 'Umum') === 'SMA' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                            "bg-slate-50 text-slate-600 border-slate-100"
+                          )}>
+                            {item.schoolUnit || 'Umum'}
                           </span>
                           {item.isUangMuka && (
                             <span className="bg-emerald-100 border border-emerald-300 text-emerald-800 text-[9px] font-bold uppercase px-2 py-0.5 rounded-full flex items-center gap-1">
@@ -1261,6 +1290,22 @@ export default function HutangPiutang() {
                       <TrendingDown className="w-4 h-4" /> Hutang (Liabilitas)
                     </button>
                   </div>
+                </div>
+
+                 {/* Unit Sekolah Select */}
+                <div>
+                  <label className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">
+                    Unit Sekolah
+                  </label>
+                  <select
+                    value={formSchoolUnit}
+                    onChange={(e) => setFormSchoolUnit(e.target.value as any)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-natural-primary cursor-pointer"
+                  >
+                    <option value="Umum">Umum (Gabungan)</option>
+                    <option value="SMP">SMP</option>
+                    <option value="SMA">SMA</option>
+                  </select>
                 </div>
 
                 {/* Client / Vendor Name */}

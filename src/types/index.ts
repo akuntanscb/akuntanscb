@@ -29,6 +29,7 @@ export interface JournalEntry {
   createdBy: string;
   createdAt: any;
   picName?: string; // General PIC name for the entry
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum';
 }
 
 export interface InvoiceItem {
@@ -50,6 +51,7 @@ export interface Invoice {
   notes: string;
   createdBy: string;
   type?: 'Faktur' | 'Penerimaan' | 'Pengeluaran';
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum';
 }
 
 export interface DebtPayment {
@@ -82,6 +84,7 @@ export interface DebtReceivable {
   journalId?: string;
   cashAccountId?: string;
   cashAccountName?: string;
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum';
 }
 
 export interface DepreciationLog {
@@ -116,5 +119,6 @@ export interface FixedAsset {
   createdBy: string;
   createdAt: any; // Firestore Timestamp
   depreciationHistory: DepreciationLog[];
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum';
 }
 
