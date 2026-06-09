@@ -84,3 +84,37 @@ export interface DebtReceivable {
   cashAccountName?: string;
 }
 
+export interface DepreciationLog {
+  id: string;
+  date: any; // Firestore Timestamp
+  amount: number;
+  notes?: string;
+  journalId?: string;
+  postedBy: string;
+  postedAt: any; // Firestore Timestamp
+}
+
+export interface FixedAsset {
+  id: string;
+  code: string;
+  name: string;
+  purchaseDate: any; // Firestore Timestamp
+  purchaseCost: number;
+  usefulLife: number; // masa manfaat dalam tahun
+  residualValue: number;
+  depreciationMethod: 'straight_line' | 'double_declining';
+  assetAccountId: string;
+  assetAccountName: string;
+  deprExpenseAccountId: string;
+  deprExpenseAccountName: string;
+  accumDeprAccountId: string;
+  accumDeprAccountName: string;
+  status: 'Aktif' | 'Dilepas';
+  disposalDate?: any; // Firestore Timestamp
+  disposalPrice?: number;
+  remarks?: string;
+  createdBy: string;
+  createdAt: any; // Firestore Timestamp
+  depreciationHistory: DepreciationLog[];
+}
+

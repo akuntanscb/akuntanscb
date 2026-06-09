@@ -15,7 +15,8 @@ import {
   Shield,
   Sliders,
   Database,
-  Trash2
+  Trash2,
+  TrendingDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -87,6 +88,11 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     { name: t('ledger'), path: '/buku-besar', icon: Database },
     { name: t('invoices'), path: '/faktur', icon: Receipt },
     { name: t('debts'), path: '/hutang-piutang', icon: Users },
+    { 
+      name: settings.language === 'en' ? 'Fixed Assets' : (settings.language === 'ar' ? 'الأصول الثابتة' : 'Aset Tetap'), 
+      path: '/aset-tetap', 
+      icon: TrendingDown 
+    },
     { name: t('reports'), path: '/laporan', icon: PieChart },
     { name: t('coa'), path: '/coa', icon: Sliders },
     { name: t('settings'), path: '/pengaturan', icon: Settings },

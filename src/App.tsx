@@ -12,6 +12,7 @@ const COA = lazy(() => import('./pages/COA'));
 const HutangPiutang = lazy(() => import('./pages/HutangPiutang'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Trash = lazy(() => import('./pages/Trash'));
+const AsetTetap = lazy(() => import('./pages/AsetTetap'));
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/laporan" element={<Reports />} />
               <Route path="/coa" element={<COA />} />
               <Route path="/hutang-piutang" element={<HutangPiutang />} />
+              <Route path="/aset-tetap" element={<AsetTetap />} />
               <Route path="/pengaturan" element={<Settings />} />
               <Route path="/trash" element={<Trash />} />
             </Routes>

@@ -142,5 +142,27 @@ service cloud.firestore {
       allow update: if false; // Cannot modify deleted items
       allow delete: if isSignedIn();
     }
+
+    // --- Fixed Assets ---
+    function isValidFixedAsset(data) {
+      return data.code is string && data.code.size() <= 64 &&
+             data.name is string && data.name.size() <= 200 &&
+             (data.purchaseDate is timestamp || data.purchaseDate is string) &&
+             data.purchaseCost is number && data.purchaseCost >= 0 &&
+             data.usefulLife is number && data.usefulLife > 0 &&
+             data.residualValue is number && data.residualValue >= 0 &&
+             data.depreciationMethod in ['straight_line', 'double_declining'] &&
+             data.status in ['Aktif', 'Dilepas'] &&
+             data.createdBy == request.auth.uid &&
+             (data.createdAt is timestamp || data.createdAt is string) &&
+             data.depreciationHistory is list;
+    }
+
+    match /fixed_assets/{assetId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && isValidFixedAsset(incoming());
+      allow update: if isSignedIn() && isOwner(existing()) && isValidFixedAsset(incoming());
+      allow delete: if isSignedIn() && isOwner(existing());
+    }
   }
 }

@@ -52,6 +52,29 @@ export const getFinancialReports = async () => {
   const visibleBalances = balances.filter(b => b.hideOnReport !== true);
 
   const aset = sortAccounts(visibleBalances.filter(b => b.category === 'Aset'));
+  const asetLancar = aset.filter(acc => {
+    const subCat = (acc.subCategory || '').toLowerCase();
+    const name = acc.name.toLowerCase();
+    return !(
+      subCat.includes('tetap') || 
+      name.includes('aset tetap') || 
+      name.includes('peralatan') ||
+      name.includes('akumulasi penyusutan') || 
+      name.includes('akum. penyusutan')
+    );
+  });
+  const asetTetap = aset.filter(acc => {
+    const subCat = (acc.subCategory || '').toLowerCase();
+    const name = acc.name.toLowerCase();
+    return (
+      subCat.includes('tetap') || 
+      name.includes('aset tetap') || 
+      name.includes('peralatan') ||
+      name.includes('akumulasi penyusutan') || 
+      name.includes('akum. penyusutan')
+    );
+  });
+
   const liabilitas = sortAccounts(visibleBalances.filter(b => b.category === 'Liabilitas'));
   const ekuitas = sortAccounts(visibleBalances.filter(b => b.category === 'Ekuitas'));
   const pendapatan = sortAccounts(visibleBalances.filter(b => b.category === 'Pendapatan'));
@@ -59,6 +82,8 @@ export const getFinancialReports = async () => {
 
   // Calculate totals from visible accounts to preserve consistency in report grids
   const totalAset = aset.reduce((s, a) => s + a.balance, 0);
+  const totalAsetLancar = asetLancar.reduce((s, a) => s + a.balance, 0);
+  const totalAsetTetap = asetTetap.reduce((s, a) => s + a.balance, 0);
   const totalLiabilitas = liabilitas.reduce((s, a) => s + a.balance, 0);
   const totalEkuitas = ekuitas.reduce((s, a) => s + a.balance, 0);
   const totalPendapatan = pendapatan.reduce((s, a) => s + a.balance, 0);
@@ -189,7 +214,7 @@ export const getFinancialReports = async () => {
   const netCashFlowChange = netOprCashFlow + netInvCashFlow + netPenCashFlow;
 
   return {
-    neraca: { aset, liabilitas, ekuitas, totalAset, totalLiabilitas, totalEkuitas, surplusDefisit },
+    neraca: { aset, asetLancar, asetTetap, totalAsetLancar, totalAsetTetap, liabilitas, ekuitas, totalAset, totalLiabilitas, totalEkuitas, surplusDefisit },
     aktivitas: { pendapatan, beban, totalPendapatan, totalBeban, surplusDefisit },
     arusKas: {
       details: {

@@ -390,10 +390,16 @@ export default function Reports() {
     if (activeTab === 'neraca') {
       title = 'Laporan_Neraca';
       text += 'LAPORAN POSISI KEUANGAN (NERACA)\n\n';
-      text += '*** ASET ***\n';
-      data.neraca.aset.forEach((a: any) => {
+      text += '*** ASET LANCAR ***\n';
+      (data.neraca.asetLancar || []).forEach((a: any) => {
         text += `${a.code} - ${a.name}: ${formatRupiah(a.balance)}\n`;
       });
+      text += `SUBTOTAL ASET LANCAR: ${formatRupiah(data.neraca.totalAsetLancar || 0)}\n\n`;
+      text += '*** ASET TETAP ***\n';
+      (data.neraca.asetTetap || []).forEach((a: any) => {
+        text += `${a.code} - ${a.name}: ${formatRupiah(a.balance)}\n`;
+      });
+      text += `SUBTOTAL ASET TETAP: ${formatRupiah(data.neraca.totalAsetTetap || 0)}\n\n`;
       text += `TOTAL ASET: ${formatRupiah(data.neraca.totalAset)}\n\n`;
       text += '*** LIABILITAS ***\n';
       data.neraca.liabilitas.forEach((l: any) => {
@@ -707,13 +713,44 @@ export default function Reports() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             <div className="space-y-6">
               <h3 className="font-bold text-slate-800 border-b pb-2 text-left">ASET</h3>
-              {data.neraca.aset.map((a: any) => (
-                <div key={a.id} className="flex justify-between text-sm">
-                  <span>{a.code} - {a.name}</span>
-                  <span className="font-mono">{formatRupiah(a.balance)}</span>
+              
+              <div className="space-y-3">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 text-left">Aset Lancar</h4>
+                {data.neraca.asetLancar && data.neraca.asetLancar.length > 0 ? (
+                  data.neraca.asetLancar.map((a: any) => (
+                    <div key={a.id} className="flex justify-between text-sm pl-2">
+                      <span>{a.code} - {a.name}</span>
+                      <span className="font-mono">{formatRupiah(a.balance)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic pl-2 text-left">Tidak ada aset lancar</p>
+                )}
+                <div className="flex justify-between border-t border-dashed pt-1 font-semibold text-slate-700 pl-2 text-xs">
+                  <span>Subtotal Aset Lancar</span>
+                  <span className="font-mono">{formatRupiah(data.neraca.totalAsetLancar || 0)}</span>
                 </div>
-              ))}
-              <div className="flex justify-between border-t-2 pt-2 font-bold text-slate-900">
+              </div>
+
+              <div className="space-y-3 pt-4">
+                <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 text-left">Aset Tetap</h4>
+                {data.neraca.asetTetap && data.neraca.asetTetap.length > 0 ? (
+                  data.neraca.asetTetap.map((a: any) => (
+                    <div key={a.id} className="flex justify-between text-sm pl-2">
+                      <span>{a.code} - {a.name}</span>
+                      <span className="font-mono">{formatRupiah(a.balance)}</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[11px] text-gray-400 italic pl-2 text-left">Tidak ada aset tetap</p>
+                )}
+                <div className="flex justify-between border-t border-dashed pt-1 font-semibold text-slate-700 pl-2 text-xs">
+                  <span>Subtotal Aset Tetap</span>
+                  <span className="font-mono">{formatRupiah(data.neraca.totalAsetTetap || 0)}</span>
+                </div>
+              </div>
+
+              <div className="flex justify-between border-t-2 pt-2 font-bold text-slate-900 bg-slate-50 p-2 rounded">
                 <span>TOTAL ASET</span>
                 <span className="font-mono">{formatRupiah(data.neraca.totalAset)}</span>
               </div>
@@ -1003,18 +1040,46 @@ export default function Reports() {
                   <p className="text-xs text-slate-500 italic leading-relaxed">
                     Aset Sekolah Cendekia Baznas terdiri dari Kas, Bank, Piutang Operasional serta Peralatan/Aset Tetap Sekolah. Rincian nominal dan kontribusi masing-masing pos as follows:
                   </p>
-                  <div className="divide-y divide-slate-100 pl-4">
-                    {data.neraca.aset.map((a: any) => {
-                      const pct = data.neraca.totalAset > 0 ? (a.balance / data.neraca.totalAset) * 100 : 0;
-                      return (
-                        <div key={a.id} className="flex justify-between py-2 text-xs">
-                          <span className="text-slate-600 font-medium">{a.code} - {a.name}</span>
-                          <span className="font-mono text-slate-500 font-semibold">
-                            {formatRupiah(a.balance)} <span className="text-[10px] text-gray-400 ml-2 font-normal">({pct.toFixed(1)}%)</span>
-                          </span>
-                        </div>
-                      );
-                    })}
+                  <div className="space-y-4 pt-2">
+                    {/* Aset Lancar */}
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 text-left">Aset Lancar</h4>
+                      {(data.neraca.asetLancar || []).map((a: any) => {
+                        const pct = data.neraca.totalAset > 0 ? (a.balance / data.neraca.totalAset) * 100 : 0;
+                        return (
+                          <div key={a.id} className="flex justify-between py-1 text-xs pl-2">
+                            <span className="text-slate-600 font-medium">{a.code} - {a.name}</span>
+                            <span className="font-mono text-slate-500 font-semibold">
+                              {formatRupiah(a.balance)} <span className="text-[10px] text-gray-400 ml-2 font-normal">({pct.toFixed(1)}%)</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex justify-between py-1 text-xs font-bold border-t border-dashed pl-2">
+                        <span className="text-slate-700">Subtotal Aset Lancar</span>
+                        <span className="font-mono text-slate-700">{formatRupiah(data.neraca.totalAsetLancar || 0)}</span>
+                      </div>
+                    </div>
+
+                    {/* Aset Tetap */}
+                    <div className="space-y-2 pt-2">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 text-left">Aset Tetap</h4>
+                      {(data.neraca.asetTetap || []).map((a: any) => {
+                        const pct = data.neraca.totalAset > 0 ? (a.balance / data.neraca.totalAset) * 100 : 0;
+                        return (
+                          <div key={a.id} className="flex justify-between py-1 text-xs pl-2">
+                            <span className="text-slate-600 font-medium">{a.code} - {a.name}</span>
+                            <span className="font-mono text-slate-500 font-semibold">
+                              {formatRupiah(a.balance)} <span className="text-[10px] text-gray-400 ml-2 font-normal">({pct.toFixed(1)}%)</span>
+                            </span>
+                          </div>
+                        );
+                      })}
+                      <div className="flex justify-between py-1 text-xs font-bold border-t border-dashed pl-2">
+                        <span className="text-slate-700">Subtotal Aset Tetap</span>
+                        <span className="font-mono text-slate-700">{formatRupiah(data.neraca.totalAsetTetap || 0)}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

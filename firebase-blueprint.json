@@ -108,6 +108,32 @@
         "data": { "type": "object", "description": "Raw data asli dari dokumen" }
       },
       "required": ["originalId", "originalCollection", "deletedAt", "deletedBy", "metadata", "data"]
+    },
+    "FixedAsset": {
+      "title": "Aset Tetap",
+      "description": "Pencatatan inventaris aset tetap dan histori penyusutannya.",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "Kode Aset (misal: AST-0001)" },
+        "name": { "type": "string", "description": "Nama Aset" },
+        "purchaseDate": { "type": "string", "format": "date-time", "description": "Tanggal Perolehan Aset" },
+        "purchaseCost": { "type": "number", "description": "Harga Perolehan Aset (Rp)" },
+        "usefulLife": { "type": "number", "description": "Masa Manfaat (Tahun)" },
+        "residualValue": { "type": "number", "description": "Nilai Sisa / Residu" },
+        "depreciationMethod": { "type": "string", "enum": ["straight_line", "double_declining"], "description": "Metode penyusutan" },
+        "assetAccountId": { "type": "string", "description": "ID Akun Aset Tetap" },
+        "assetAccountName": { "type": "string", "description": "Nama Akun Aset Tetap" },
+        "deprExpenseAccountId": { "type": "string", "description": "ID Akun Beban Penyusutan" },
+        "deprExpenseAccountName": { "type": "string", "description": "Nama Akun Beban Penyusutan" },
+        "accumDeprAccountId": { "type": "string", "description": "ID Akun Akumulasi Penyusutan" },
+        "accumDeprAccountName": { "type": "string", "description": "Nama Akun Akumulasi Penyusutan" },
+        "status": { "type": "string", "enum": ["Aktif", "Dilepas"], "description": "Status operasional aset" },
+        "remarks": { "type": "string", "description": "Catatan tambahan" },
+        "createdBy": { "type": "string", "description": "UID pembuat data" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Tanggal data diinput" },
+        "depreciationHistory": { "type": "array", "description": "Riwayat penyusutan yang terposting" }
+      },
+      "required": ["code", "name", "purchaseDate", "purchaseCost", "usefulLife", "residualValue", "depreciationMethod", "status", "createdBy", "createdAt"]
     }
   },
   "firestore": {
@@ -134,6 +160,10 @@
     "deleted_records": {
       "schema": "DeletedRecord",
       "description": "Koleksi data cadangan terhapus untuk pemulihan."
+    },
+    "fixed_assets": {
+      "schema": "FixedAsset",
+      "description": "Koleksi pencatatan inventaris aset tetap."
     }
   }
 }
