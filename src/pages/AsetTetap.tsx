@@ -17,7 +17,14 @@ import {
   PiggyBank,
   ArrowRight,
   ChevronRight,
-  Info
+  Info,
+  FileDown,
+  FileUp,
+  FileSpreadsheet,
+  FileJson,
+  Upload,
+  Download,
+  Save
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { getFixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, postAssetDepreciation } from '../services/fixedAssetService';
@@ -26,12 +33,40 @@ import { FixedAsset, DepreciationLog, Account } from '../types';
 import { auth } from '../lib/firebase';
 import { formatRupiah, cn } from '../lib/utils';
 
+interface ParsedFixedAsset {
+  code: string;
+  name: string;
+  purchaseDateStr: string;
+  purchaseCost: number;
+  usefulLife: number;
+  residualValue: number;
+  depreciationMethod: 'straight_line' | 'double_declining';
+  assetAccountCodeOrName?: string;
+  deprExpenseAccountCodeOrName?: string;
+  accumDeprAccountCodeOrName?: string;
+  remarks: string;
+  schoolUnit: 'SMP' | 'SMA' | 'Umum';
+  isValid: boolean;
+  errors: string[];
+  action: 'create' | 'update';
+  existingId?: string;
+}
+
 export default function AsetTetap() {
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
   const [successMsg, setSuccessMsg] = useState<string>('');
+
+  // Import / Export engine states
+  const [showImportExport, setShowImportExport] = useState<boolean>(false);
+  const [dragOver, setDragOver] = useState<boolean>(false);
+  const [importLoading, setImportLoading] = useState<boolean>(false);
+  const [importProgress, setImportProgress] = useState<{ current: number; total: number }>({ current: 0, total: 0 });
+  const [importSuccessMsg, setImportSuccessMsg] = useState<string>('');
+  const [importErrorMsg, setImportErrorMsg] = useState<string>('');
+  const [parsedAssets, setParsedAssets] = useState<ParsedFixedAsset[]>([]);
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -137,6 +172,536 @@ export default function AsetTetap() {
     } else {
       setSuccessMsg(message);
       setTimeout(() => setSuccessMsg(''), 4000);
+    }
+  };
+
+  // ==========================================
+  // EXPORT & IMPORT ENGINE ROUTINES (FIXED ASSET)
+  // ==========================================
+
+  const parseCSV = (text: string): string[][] => {
+    const result: string[][] = [];
+    const lines = text.split(/\r?\n/);
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+      
+      const row: string[] = [];
+      let insideQuotes = false;
+      let currentVal = '';
+      
+      for (let c = 0; c < line.length; c++) {
+        const char = line[c];
+        
+        if (char === '"') {
+          if (insideQuotes && line[c + 1] === '"') {
+            currentVal += '"';
+            c++;
+          } else {
+            insideQuotes = !insideQuotes;
+          }
+        } else if (char === ',' && !insideQuotes) {
+          row.push(currentVal.trim());
+          currentVal = '';
+        } else {
+          currentVal += char;
+        }
+      }
+      row.push(currentVal.trim());
+      result.push(row);
+    }
+    return result;
+  };
+
+  const handleExportCSV = (all: boolean) => {
+    const dataToExport = all ? assets : filteredAssets;
+    if (dataToExport.length === 0) {
+      alert("Tidak ada data inventaris aset tetap untuk diekspor.");
+      return;
+    }
+    
+    const headers = [
+      "Kode Aset", 
+      "Nama Barang", 
+      "Tanggal Perolehan", 
+      "Harga Perolehan", 
+      "Masa Manfaat (Tahun)", 
+      "Nilai Residu", 
+      "Metode Penyusutan", 
+      "Unit Sekolah", 
+      "Keterangan", 
+      "Kode Akun Aset", 
+      "Nama Akun Aset", 
+      "Kode Beban Penyusutan", 
+      "Nama Beban Penyusutan", 
+      "Kode Akumulasi Penyusutan", 
+      "Nama Akumulasi Penyusutan", 
+      "Status"
+    ];
+    
+    const rows = [headers];
+    
+    dataToExport.forEach(item => {
+      const pDate = toJSDate(item.purchaseDate);
+      const dateStr = pDate.toISOString().split('T')[0];
+      rows.push([
+        item.code,
+        item.name,
+        dateStr,
+        item.purchaseCost.toString(),
+        item.usefulLife.toString(),
+        item.residualValue.toString(),
+        item.depreciationMethod,
+        item.schoolUnit || 'Umum',
+        item.remarks || '',
+        accounts.find(a => a.id === item.assetAccountId)?.code || '',
+        item.assetAccountName || '',
+        accounts.find(a => a.id === item.deprExpenseAccountId)?.code || '',
+        item.deprExpenseAccountName || '',
+        accounts.find(a => a.id === item.accumDeprAccountId)?.code || '',
+        item.accumDeprAccountName || '',
+        item.status || 'Aktif'
+      ]);
+    });
+    
+    const csvContent = "\uFEFF" + rows.map(r => r.map(val => {
+      const clean = (val || '').replace(/"/g, '""');
+      return `"${clean}"`;
+    }).join(",")).join("\n");
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ekspor_Aset_Tetap_${all ? 'Semua' : 'Terfilter'}_${new Date().toISOString().slice(0,10)}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleExportJSON = (all: boolean) => {
+    const dataToExport = all ? assets : filteredAssets;
+    if (dataToExport.length === 0) {
+      alert("Tidak ada data inventaris aset tetap untuk diekspor.");
+      return;
+    }
+
+    const serializableData = dataToExport.map(item => {
+      const pDate = toJSDate(item.purchaseDate);
+      return {
+        code: item.code,
+        name: item.name,
+        purchaseDate: pDate.toISOString().split('T')[0],
+        purchaseCost: item.purchaseCost,
+        usefulLife: item.usefulLife,
+        residualValue: item.residualValue,
+        depreciationMethod: item.depreciationMethod,
+        schoolUnit: item.schoolUnit || 'Umum',
+        remarks: item.remarks || '',
+        assetAccountCode: accounts.find(a => a.id === item.assetAccountId)?.code || '',
+        assetAccountName: item.assetAccountName,
+        deprExpenseAccountCode: accounts.find(a => a.id === item.deprExpenseAccountId)?.code || '',
+        deprExpenseAccountName: item.deprExpenseAccountName,
+        accumDeprAccountCode: accounts.find(a => a.id === item.accumDeprAccountId)?.code || '',
+        accumDeprAccountName: item.accumDeprAccountName,
+        status: item.status || 'Aktif'
+      };
+    });
+
+    const jsonContent = JSON.stringify(serializableData, null, 2);
+    const blob = new Blob([jsonContent], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Ekspor_Aset_Tetap_${all ? 'Semua' : 'Terfilter'}_${new Date().toISOString().slice(0,10)}.json`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "Kode Aset", 
+      "Nama Barang", 
+      "Tanggal Perolehan", 
+      "Harga Perolehan", 
+      "Masa Manfaat (Tahun)", 
+      "Nilai Residu", 
+      "Metode Penyusutan", 
+      "Unit Sekolah", 
+      "Keterangan", 
+      "Kode Akun Aset", 
+      "Kode Beban Penyusutan", 
+      "Kode Akumulasi Penyusutan"
+    ];
+    
+    const assetAccs = accounts.filter(a => a.category === 'Aset' && a.subCategory.toLowerCase().includes('tetap'));
+    const deprAccs = accounts.filter(a => a.category === 'Beban' && a.name.toLowerCase().includes('penyusutan'));
+    const accumAccs = accounts.filter(a => a.category === 'Aset' && a.name.toLowerCase().includes('akumulasi'));
+
+    const codeAssetDefault = assetAccs[0]?.code || "1201";
+    const codeDeprDefault = deprAccs[0]?.code || "5301";
+    const codeAccumDefault = accumAccs[0]?.code || "1251";
+
+    const rows = [
+      headers,
+      ["AST-006", "Laptop ASUS Core i7", "2026-01-15", "12500000", "4", "500000", "straight_line", "SMP", "Pembelian Hibah", codeAssetDefault, codeDeprDefault, codeAccumDefault],
+      ["AST-007", "AC LG 2 PK Masjid SCB", "2026-03-10", "6500000", "5", "0", "double_declining", "Umum", "Operasional Masjid", codeAssetDefault, codeDeprDefault, codeAccumDefault],
+      ["AST-008", "Meja Belajar Kelas", "2026-05-18", "4500000", "4", "0", "straight_line", "SMA", "Kelas XII IPS", codeAssetDefault, codeDeprDefault, codeAccumDefault]
+    ];
+
+    const csvContent = "\uFEFF" + rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", "template_inventaris_aset_tetap.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      processFile(file);
+    }
+  };
+
+  const processFile = (file: File) => {
+    setImportSuccessMsg('');
+    setImportErrorMsg('');
+    setParsedAssets([]);
+    
+    const reader = new FileReader();
+    const isCSV = file.name.endsWith('.csv');
+    const isJSON = file.name.endsWith('.json');
+    
+    if (!isCSV && !isJSON) {
+      setImportErrorMsg('Format file tidak didukung. Harap unggah file .csv atau .json.');
+      return;
+    }
+    
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const tempParsedList: ParsedFixedAsset[] = [];
+        
+        const assetAccs = accounts.filter(a => a.category === 'Aset' && a.subCategory.toLowerCase().includes('tetap'));
+        const deprAccs = accounts.filter(a => a.category === 'Beban' && a.name.toLowerCase().includes('penyusutan'));
+        const accumAccs = accounts.filter(a => a.category === 'Aset' && a.name.toLowerCase().includes('akumulasi'));
+        
+        const defaultAssetAcc = assetAccs[0] || null;
+        const defaultDeprAcc = deprAccs[0] || null;
+        const defaultAccumAcc = accumAccs[0] || null;
+
+        if (isCSV) {
+          const csvRows = parseCSV(text);
+          if (csvRows.length < 2) {
+            setImportErrorMsg('File CSV kosong atau tidak memiliki data.');
+            return;
+          }
+          
+          const headers = csvRows[0].map(h => h.toLowerCase().replace(/[\ufeff\s_\-()]/g, ''));
+          
+          const idxCode = headers.findIndex(h => h.includes('kode') || h.includes('code'));
+          const idxName = headers.findIndex(h => h.includes('nama') || h.includes('name') || h.includes('barang'));
+          const idxDate = headers.findIndex(h => h.includes('tgl') || h.includes('tanggal') || h.includes('date') || h.includes('perolehan'));
+          const idxCost = headers.findIndex(h => h.includes('harga') || h.includes('cost') || h.includes('nilaiperolehan') || h.includes('nilaiawal'));
+          const idxLife = headers.findIndex(h => h.includes('manfaat') || h.includes('life') || h.includes('tahun'));
+          const idxRes = headers.findIndex(h => h.includes('residu') || h.includes('residual') || h.includes('sisa'));
+          const idxMethod = headers.findIndex(h => h.includes('metode') || h.includes('method') || h.includes('penyusutan'));
+          const idxUnit = headers.findIndex(h => h.includes('unit') || h.includes('sekolah'));
+          const idxRemarks = headers.findIndex(h => h.includes('ket') || h.includes('keterangan') || h.includes('remarks') || h.includes('memo'));
+          const idxAccAsset = headers.findIndex(h => h.includes('akunaset') || h.includes('assetaccount') || h.includes('kodeakunaset'));
+          const idxAccDepr = headers.findIndex(h => h.includes('akunbeban') || h.includes('deprexpense') || h.includes('akunpenyusutan') || h.includes('bebanpenyusutan'));
+          const idxAccAccum = headers.findIndex(h => h.includes('akunakumulasi') || h.includes('accumdepr') || h.includes('akumulasipenyusutan'));
+
+          if (idxName === -1 || idxCost === -1) {
+            setImportErrorMsg("Struktur kolom CSV salah. Pastikan memiliki kolom wajib: Nama Barang, Harga Perolehan.");
+            return;
+          }
+          
+          for (let i = 1; i < csvRows.length; i++) {
+            const row = csvRows[i];
+            if (row.length === 0 || row.join('').trim() === '') continue;
+            
+            const rawCode = idxCode !== -1 ? (row[idxCode] || '').trim() : '';
+            const code = rawCode || `AST-${String(Date.now()).slice(-4)}-${i}`;
+            const name = idxName !== -1 ? (row[idxName] || '').trim() : '';
+            const purchaseDateStr = idxDate !== -1 ? (row[idxDate] || '').trim() : new Date().toISOString().split('T')[0];
+            const purchaseCost = parseFloat((idxCost !== -1 ? row[idxCost] : '0').replace(/[^0-9.-]/g, '')) || 0;
+            const usefulLife = parseInt((idxLife !== -1 ? row[idxLife] : '4').replace(/[^0-9]/g, '')) || 4;
+            const residualValue = parseFloat((idxRes !== -1 ? row[idxRes] : '0').replace(/[^0-9.-]/g, '')) || 0;
+            
+            let depreciationMethod: 'straight_line' | 'double_declining' = 'straight_line';
+            if (idxMethod !== -1) {
+              const mStr = (row[idxMethod] || '').toLowerCase();
+              if (mStr.includes('double') || mStr.includes('declining') || mStr.includes('menurun')) {
+                depreciationMethod = 'double_declining';
+              }
+            }
+            
+            let schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum';
+            if (idxUnit !== -1) {
+              const uStr = (row[idxUnit] || '').toUpperCase();
+              if (uStr.includes('SMP')) schoolUnit = 'SMP';
+              else if (uStr.includes('SMA')) schoolUnit = 'SMA';
+            }
+            
+            const remarks = idxRemarks !== -1 ? (row[idxRemarks] || '').trim() : '';
+            const assetCodeOrName = idxAccAsset !== -1 ? (row[idxAccAsset] || '').trim() : '';
+            const deprCodeOrName = idxAccDepr !== -1 ? (row[idxAccDepr] || '').trim() : '';
+            const accumCodeOrName = idxAccAccum !== -1 ? (row[idxAccAccum] || '').trim() : '';
+
+            const errors: string[] = [];
+            if (!name) errors.push("Nama barang wajib diisi.");
+            if (purchaseCost <= 0) errors.push("Harga perolehan harus lebih besar dari 0.");
+            if (usefulLife <= 0) errors.push("Masa manfaat minimal 1 tahun.");
+            if (residualValue < 0) errors.push("Nilai residu tidak boleh negatif.");
+            if (residualValue >= purchaseCost) errors.push("Nilai residu tidak boleh melebihi atau sama dengan harga perolehan.");
+
+            let isValidDate = true;
+            try {
+              const d = new Date(purchaseDateStr);
+              if (isNaN(d.getTime())) isValidDate = false;
+            } catch {
+              isValidDate = false;
+            }
+            if (!isValidDate) errors.push(`Format tanggal perolehan tidak valid: '${purchaseDateStr}'. Gunakan YYYY-MM-DD.`);
+
+            const findAccount = (codeOrName: string, category: 'Aset' | 'Beban', defaultAcc: any) => {
+              if (!codeOrName) return defaultAcc;
+              const clean = codeOrName.trim().toLowerCase();
+              let matched = accounts.find(a => a.code.toLowerCase() === clean);
+              if (!matched) {
+                matched = accounts.find(a => a.name.toLowerCase() === clean);
+              }
+              if (!matched) {
+                matched = accounts.find(a => a.category === category && a.name.toLowerCase().includes(clean));
+              }
+              return matched || defaultAcc;
+            };
+
+            const assetAcc = findAccount(assetCodeOrName, 'Aset', defaultAssetAcc);
+            const deprAcc = findAccount(deprCodeOrName, 'Beban', defaultDeprAcc);
+            const accumAcc = findAccount(accumCodeOrName, 'Aset', defaultAccumAcc);
+
+            if (!assetAcc) errors.push("Akun COA Aset Tetap tidak terdeteksi.");
+            if (!deprAcc) errors.push("Akun COA Beban Penyusutan tidak terdeteksi.");
+            if (!accumAcc) errors.push("Akun COA Akumulasi Penyusutan tidak terdeteksi.");
+
+            const existingAsset = assets.find(a => a.code === code);
+            const action = existingAsset ? 'update' : 'create';
+
+            tempParsedList.push({
+              code,
+              name,
+              purchaseDateStr,
+              purchaseCost,
+              usefulLife,
+              residualValue,
+              depreciationMethod,
+              schoolUnit,
+              remarks,
+              assetAccountCodeOrName: assetAcc?.code || '',
+              deprExpenseAccountCodeOrName: deprAcc?.code || '',
+              accumDeprAccountCodeOrName: accumAcc?.code || '',
+              isValid: errors.length === 0,
+              errors,
+              action,
+              existingId: existingAsset?.id
+            });
+          }
+        } else if (isJSON) {
+          const parsedArray = JSON.parse(text);
+          const arrayToProcess = Array.isArray(parsedArray) ? parsedArray : [parsedArray];
+          
+          arrayToProcess.forEach((item: any, iIdx: number) => {
+            const rawCode = String(item.code || item.kode || item.kodeAset || '').trim();
+            const code = rawCode || `AST-${String(Date.now()).slice(-4)}-${iIdx}`;
+            const name = String(item.name || item.nama || item.namaBarang || '').trim();
+            const purchaseDateStr = String(item.purchaseDate || item.tanggalPerolehan || item.tanggal || '').trim() || new Date().toISOString().split('T')[0];
+            const purchaseCost = Number(item.purchaseCost || item.hargaPerolehan || item.harga || 0);
+            const usefulLife = Number(item.usefulLife || item.masaManfaat || item.masaManfaatTahun || 4);
+            const residualValue = Number(item.residualValue || item.nilaiResidu || 0);
+            
+            let depreciationMethod: 'straight_line' | 'double_declining' = 'straight_line';
+            const mStr = String(item.depreciationMethod || item.metodePenyusutan || item.metode || '').toLowerCase();
+            if (mStr.includes('double') || mStr.includes('declining') || mStr.includes('menurun')) {
+              depreciationMethod = 'double_declining';
+            }
+
+            let schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum';
+            const uStr = String(item.schoolUnit || item.unitSekolah || item.unit || '').toUpperCase();
+            if (uStr.includes('SMP')) schoolUnit = 'SMP';
+            else if (uStr.includes('SMA')) schoolUnit = 'SMA';
+
+            const remarks = String(item.remarks || item.keterangan || item.memo || '').trim();
+            const assetCodeOrName = String(item.assetAccountCode || item.kodeAkunAset || item.assetAccountName || item.akunAset || '');
+            const deprCodeOrName = String(item.deprExpenseAccountCode || item.kodeBebanPenyusutan || item.deprExpenseAccountName || item.bebanPenyusutan || '');
+            const accumCodeOrName = String(item.accumDeprAccountCode || item.kodeAkumulasiPenyusutan || item.accumDeprAccountName || item.akumulasiPenyusutan || '');
+
+            const errors: string[] = [];
+            if (!name) errors.push("Nama barang wajib diisi.");
+            if (purchaseCost <= 0) errors.push("Harga perolehan harus lebih besar dari 0.");
+            if (usefulLife <= 0) errors.push("Masa manfaat minimal 1 tahun.");
+            if (residualValue < 0) errors.push("Nilai residu tidak boleh negatif.");
+            if (residualValue >= purchaseCost) errors.push("Nilai residu tidak boleh melebihi atau sama dengan harga perolehan.");
+
+            let isValidDate = true;
+            try {
+              const d = new Date(purchaseDateStr);
+              if (isNaN(d.getTime())) isValidDate = false;
+            } catch {
+              isValidDate = false;
+            }
+            if (!isValidDate) errors.push(`Format tanggal perolehan tidak valid: '${purchaseDateStr}'. Gunakan YYYY-MM-DD.`);
+
+            const findAccount = (codeOrName: string, category: 'Aset' | 'Beban', defaultAcc: any) => {
+              if (!codeOrName) return defaultAcc;
+              const clean = codeOrName.trim().toLowerCase();
+              let matched = accounts.find(a => a.code.toLowerCase() === clean);
+              if (!matched) {
+                matched = accounts.find(a => a.name.toLowerCase() === clean);
+              }
+              if (!matched) {
+                matched = accounts.find(a => a.category === category && a.name.toLowerCase().includes(clean));
+              }
+              return matched || defaultAcc;
+            };
+
+            const assetAcc = findAccount(assetCodeOrName, 'Aset', defaultAssetAcc);
+            const deprAcc = findAccount(deprCodeOrName, 'Beban', defaultDeprAcc);
+            const accumAcc = findAccount(accumCodeOrName, 'Aset', defaultAccumAcc);
+
+            if (!assetAcc) errors.push("Akun COA Aset Tetap tidak terdeteksi.");
+            if (!deprAcc) errors.push("Akun COA Beban Penyusutan tidak terdeteksi.");
+            if (!accumAcc) errors.push("Akun COA Akumulasi Penyusutan tidak terdeteksi.");
+
+            const existingAsset = assets.find(a => a.code === code);
+            const action = existingAsset ? 'update' : 'create';
+
+            tempParsedList.push({
+              code,
+              name,
+              purchaseDateStr,
+              purchaseCost,
+              usefulLife,
+              residualValue,
+              depreciationMethod,
+              schoolUnit,
+              remarks,
+              assetAccountCodeOrName: assetAcc?.code || '',
+              deprExpenseAccountCodeOrName: deprAcc?.code || '',
+              accumDeprAccountCodeOrName: accumAcc?.code || '',
+              isValid: errors.length === 0,
+              errors,
+              action,
+              existingId: existingAsset?.id
+            });
+          });
+        }
+        
+        if (tempParsedList.length === 0) {
+          setImportErrorMsg('Tidak ada data aset tetap yang dapat dibaca dlm file.');
+          return;
+        }
+
+        const invalidCount = tempParsedList.filter(p => !p.isValid).length;
+        if (invalidCount > 0) {
+          setImportErrorMsg(`Ditemukan ${invalidCount} baris bermasalah dari total ${tempParsedList.length} entri inventaris.`);
+        }
+        setParsedAssets(tempParsedList);
+      } catch (err: any) {
+        console.error(err);
+        setImportErrorMsg('Gagal memproses file. Pastikan format tabel/struktur data valid.');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleConfirmImport = async () => {
+    const validOnes = parsedAssets.filter(e => e.isValid);
+    if (validOnes.length === 0) {
+      alert("Tidak ada data aset tetap valid untuk diimpor.");
+      return;
+    }
+    
+    setImportLoading(true);
+    setImportProgress({ current: 0, total: validOnes.length });
+    
+    let processedCount = 0;
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error('Harap lakukan autentikasi akun terlebih dahulu.');
+
+      for (let i = 0; i < validOnes.length; i++) {
+        const item = validOnes[i];
+        
+        const assetAccObj = accounts.find(a => a.code === item.assetAccountCodeOrName || a.name === item.assetAccountCodeOrName);
+        const deprAccObj = accounts.find(a => a.code === item.deprExpenseAccountCodeOrName || a.name === item.deprExpenseAccountCodeOrName);
+        const accumAccObj = accounts.find(a => a.code === item.accumDeprAccountCodeOrName || a.name === item.accumDeprAccountCodeOrName);
+
+        const assetPayload = {
+          code: item.code,
+          name: item.name,
+          purchaseDate: Timestamp.fromDate(new Date(item.purchaseDateStr)),
+          purchaseCost: item.purchaseCost,
+          usefulLife: item.usefulLife,
+          residualValue: item.residualValue,
+          depreciationMethod: item.depreciationMethod,
+          assetAccountId: assetAccObj?.id || '',
+          assetAccountName: assetAccObj?.name || 'Aset Tetap Terkait',
+          deprExpenseAccountId: deprAccObj?.id || '',
+          deprExpenseAccountName: deprAccObj?.name || 'Beban Penyusutan',
+          accumDeprAccountId: accumAccObj?.id || '',
+          accumDeprAccountName: accumAccObj?.name || 'Akumulasi Penyusutan',
+          status: 'Aktif' as const,
+          remarks: item.remarks,
+          schoolUnit: item.schoolUnit
+        };
+
+        if (item.action === 'update' && item.existingId) {
+          await updateFixedAsset(item.existingId, assetPayload);
+        } else {
+          await createFixedAsset(assetPayload as any, user.uid);
+        }
+        
+        processedCount++;
+        setImportProgress({ current: processedCount, total: validOnes.length });
+      }
+      
+      setImportSuccessMsg(`Sukses! Berhasil mengimpor/singkronisasi ${processedCount} inventaris aset tetap ke database.`);
+      setParsedAssets([]);
+      loadData();
+      setTimeout(() => {
+        setImportSuccessMsg('');
+      }, 5000);
+    } catch (err: any) {
+      console.error(err);
+      setImportErrorMsg(`Gagal memproses impor aset: ${err.message || 'Error internal'}`);
+    } finally {
+      setImportLoading(false);
     }
   };
 
@@ -542,6 +1107,248 @@ export default function AsetTetap() {
         </div>
       </div>
 
+      {/* Import & Export Panel */}
+      <AnimatePresence>
+        {showImportExport && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden mb-6 animate-none"
+          >
+            <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* Export Panel */}
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-600">
+                    <FileDown className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="font-serif italic font-bold text-slate-800 text-base">Ekspor Inventaris Aset Tetap</h3>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unduh data aset tetap dalam format file CSV atau JSON</p>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Ekspor daftar inventaris aset tetap Anda ke dalam format CSV untuk dianalisis di Excel atau format JSON untuk cadangan database offline lengkap.
+                </p>
+
+                <div className="bg-white/80 border border-slate-100 p-4 rounded-2xl flex flex-col sm:flex-row gap-4 items-center justify-between">
+                  <div className="text-xs space-y-1 w-full sm:w-auto text-left">
+                    <div className="flex justify-between sm:justify-start gap-3">
+                      <span className="text-slate-400">Total Terdaftar:</span>
+                      <span className="font-bold text-slate-700 font-mono">{assets.length} aset</span>
+                    </div>
+                    <div className="flex justify-between sm:justify-start gap-3">
+                      <span className="text-slate-400">Terfilter di layar:</span>
+                      <span className="font-bold text-natural-primary font-mono">{filteredAssets.length} aset</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2 w-full sm:w-auto">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleExportCSV(true)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-emerald-600 hover:bg-emerald-700 font-semibold text-white rounded-xl shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5" /> CSV (Semua)
+                      </button>
+                      <button
+                        onClick={() => handleExportCSV(false)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 font-semibold text-emerald-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        CSV (Terfilter)
+                      </button>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleExportJSON(true)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-800 hover:bg-slate-900 font-semibold text-white rounded-xl shadow-sm transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        <FileJson className="w-3.5 h-3.5" /> JSON (Semua)
+                      </button>
+                      <button
+                        onClick={() => handleExportJSON(false)}
+                        className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-50 border border-slate-205 hover:bg-slate-100 font-semibold text-slate-700 rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5 whitespace-nowrap"
+                      >
+                        JSON (Terfilter)
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Import Panel */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                      <FileUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="font-serif italic font-bold text-slate-800 text-base">Impor Inventaris Aset Tetap</h3>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi inventaris instan</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleDownloadTemplate}
+                    className="text-[10px] text-indigo-700 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
+                    title="Unduh format tabel dalam Excel/CSV"
+                  >
+                    <Download className="w-3 h-3" /> Unduh Template CSV
+                  </button>
+                </div>
+
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={cn(
+                    "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
+                    dragOver 
+                      ? "border-indigo-505 bg-indigo-50/50" 
+                      : "border-slate-200 bg-white hover:border-slate-300"
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept=".csv,.json"
+                    id="import-assets-file-selector"
+                    onChange={handleFileChange}
+                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                    title=""
+                  />
+                  <Upload className="w-8 h-8 text-slate-400 shrink-0" />
+                  <div className="space-y-0.5 select-none font-sans">
+                    <p className="text-xs font-semibold text-slate-700 font-sans">Tarik & Lepaskan File (.csv atau .json)</p>
+                    <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
+                  </div>
+                </div>
+
+                {importSuccessMsg && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2 font-sans">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>{importSuccessMsg}</span>
+                  </div>
+                )}
+
+                {importErrorMsg && (
+                  <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2 font-sans">
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span className="flex-1">{importErrorMsg}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Parsing Review Panel / Importer Preview Table */}
+            {parsedAssets.length > 0 && (
+              <div className="mt-4 bg-white border border-natural-border rounded-3xl p-6 shadow-md space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-4 border-b border-slate-100">
+                  <div className="text-left font-sans">
+                    <h4 className="font-serif italic font-bold text-slate-800 text-base">Tinjau Validasi Transaksi Impor Aset Tetap</h4>
+                    <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono font-semibold">
+                      Terbaca: <b className="text-slate-805 font-bold font-mono">{parsedAssets.length}</b> Aset • Baru (Tambah): <b className="text-emerald-700 font-bold font-mono">{parsedAssets.filter(p => p.isValid && p.action === 'create').length}</b> • Sinkron (Update): <b className="text-blue-700 font-bold font-mono">{parsedAssets.filter(p => p.isValid && p.action === 'update').length}</b> • Bermasalah: <b className="text-rose-650 font-bold font-mono">{parsedAssets.filter(p => !p.isValid).length}</b>
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center gap-3 w-full sm:w-auto">
+                    <button
+                      onClick={() => setParsedAssets([])}
+                      className="flex-1 sm:flex-none px-4 py-2 text-xs bg-slate-50 border border-slate-205 hover:bg-slate-100 text-slate-600 font-semibold rounded-lg transition-colors cursor-pointer text-center font-sans"
+                    >
+                      Bersihkan
+                    </button>
+                    <button
+                      onClick={handleConfirmImport}
+                      disabled={importLoading || parsedAssets.filter(p => p.isValid).length === 0}
+                      className="flex-1 sm:flex-none px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-all shadow-md flex items-center justify-center gap-1.5 cursor-pointer font-sans"
+                    >
+                      {importLoading ? (
+                        <>
+                          <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                          <span>Menyimpan ({importProgress.current}/{importProgress.total})...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" />
+                          <span>Proses Impor {parsedAssets.filter(p => p.isValid).length} Entri Valid</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="max-h-60 overflow-y-auto divide-y divide-slate-100 border border-slate-100 rounded-2xl">
+                  {parsedAssets.map((pa, idx) => (
+                    <div key={idx} className="p-3 bg-slate-50/30 flex flex-col md:flex-row justify-between items-start gap-4 text-xs font-sans">
+                      <div className="space-y-1 flex-1 text-left font-sans">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {!pa.isValid ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-rose-500 shrink-0 animate-pulse" title="Perlu Koreksi" />
+                          ) : pa.action === 'update' ? (
+                            <span className="w-2.5 h-2.5 rounded-full bg-blue-500 shrink-0" title="Sinkron / Update Aset Terdaftar" />
+                          ) : (
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0" title="Aset Baru" />
+                          )}
+                          <span className="font-mono text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-1.5 py-0.5 rounded">
+                            {pa.code || 'Tanpa Kode'}
+                          </span>
+                          <span className="font-bold text-slate-800 text-sm">{pa.name || 'Nama Kosong'}</span>
+                          
+                          <span className="text-[10px] font-mono font-bold bg-slate-100 text-slate-800 px-2 py-0.5 rounded border border-slate-200">
+                            {formatRupiah(pa.purchaseCost)}
+                          </span>
+
+                          <span className={cn(
+                            "text-[8px] font-bold uppercase px-1.5 py-0.5 rounded-full border leading-none font-sans",
+                            pa.schoolUnit === 'SMP' ? "bg-sky-50 text-sky-700 border-sky-100" :
+                            pa.schoolUnit === 'SMA' ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                            "bg-slate-50 text-slate-600 border-slate-200"
+                          )}>
+                            {pa.schoolUnit}
+                          </span>
+                        </div>
+                        
+                        <div className="text-[10px] text-slate-550 leading-relaxed font-sans">
+                          Tgl Perolehan: <strong className="text-slate-600 font-mono">{pa.purchaseDateStr}</strong> • Manfaat: <strong className="text-slate-600 font-mono">{pa.usefulLife} Thn</strong> • Residu: <strong className="text-slate-600 font-mono">{formatRupiah(pa.residualValue)}</strong> • Metode: <strong className="text-slate-600">{pa.depreciationMethod === 'straight_line' ? 'Garis Lurus' : 'Saldo Menurun'}</strong> • Keterangan: <strong className="text-slate-600 italic">{pa.remarks || '-'}</strong>
+                        </div>
+                        
+                        {/* Errors report */}
+                        {!pa.isValid && (
+                          <div className="space-y-1 mt-1 bg-rose-50 border border-rose-100 text-rose-700 p-2.5 rounded-xl text-[10px] font-medium leading-relaxed max-w-lg font-sans">
+                            {pa.errors.map((err, eIdx) => (
+                              <div key={eIdx} className="flex gap-1 items-start">
+                                <span className="text-rose-500 shrink-0">•</span>
+                                <span>{err}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action plan summary */}
+                      <div className="text-right shrink-0 font-sans">
+                        {pa.isValid && (
+                          <span className={cn(
+                            "px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-mono tracking-wider border",
+                            pa.action === 'update' 
+                              ? "bg-blue-50 text-blue-700 border-blue-200" 
+                              : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          )}>
+                            {pa.action === 'update' ? 'Update/Sinkron' : 'Aset Baru'}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Main Panel */}
       <div className="bg-white rounded-2xl border border-natural-border/60 shadow-sm overflow-hidden min-h-[400px]">
         {/* Toolbar */}
@@ -590,14 +1397,29 @@ export default function AsetTetap() {
             </select>
           </div>
 
-          {/* Right action button */}
-          <button
-            onClick={handleOpenAdd}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 bg-natural-primary rounded-xl text-xs font-bold text-white shadow-md cursor-pointer hover:brightness-110 active:scale-[0.98] transition-all shrink-0"
-          >
-            <Plus className="w-4 h-4 text-white/90" />
-            <span>Tambah Aset Tetap</span>
-          </button>
+          {/* Right action button group */}
+          <div className="flex gap-2 shrink-0">
+            <button
+              onClick={() => setShowImportExport(!showImportExport)}
+              className={cn(
+                "flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer select-none border",
+                showImportExport 
+                  ? "bg-slate-100 text-slate-800 border-slate-300"
+                  : "bg-white text-slate-600 border-natural-border hover:bg-slate-50"
+              )}
+            >
+              <FileUp className="w-4 h-4" />
+              <span>Ekspor / Impor</span>
+            </button>
+
+            <button
+              onClick={handleOpenAdd}
+              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-natural-primary rounded-xl text-xs font-bold text-white shadow-md cursor-pointer hover:brightness-110 active:scale-[0.98] transition-all shrink-0"
+            >
+              <Plus className="w-4 h-4 text-white/90" />
+              <span>Tambah Aset Tetap</span>
+            </button>
+          </div>
         </div>
 
         {/* Assets List Table */}
