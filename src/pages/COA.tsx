@@ -30,6 +30,9 @@ interface ParsedAccount {
   category: AccountCategory;
   subCategory: string;
   initialBalance: number;
+  initialBalanceSMP?: number;
+  initialBalanceSMA?: number;
+  initialBalanceUmum?: number;
   action: 'create' | 'update';
   existingId?: string;
   isValid: boolean;
@@ -51,6 +54,9 @@ export default function COA() {
   const [category, setCategory] = useState<AccountCategory>('Aset');
   const [subCategory, setSubCategory] = useState('');
   const [initialBalance, setInitialBalance] = useState<string>('0');
+  const [initialBalanceSMP, setInitialBalanceSMP] = useState<string>('0');
+  const [initialBalanceSMA, setInitialBalanceSMA] = useState<string>('0');
+  const [initialBalanceUmum, setInitialBalanceUmum] = useState<string>('0');
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -95,6 +101,9 @@ export default function COA() {
     setCategory('Aset');
     setSubCategory('');
     setInitialBalance('0');
+    setInitialBalanceSMP('0');
+    setInitialBalanceSMA('0');
+    setInitialBalanceUmum('0');
     setErrorMsg('');
     setSuccessMsg('');
     setIsModalOpen(true);
@@ -108,6 +117,9 @@ export default function COA() {
     setCategory(acc.category);
     setSubCategory(acc.subCategory || '');
     setInitialBalance(String(acc.initialBalance || 0));
+    setInitialBalanceSMP(String(acc.initialBalanceSMP || 0));
+    setInitialBalanceSMA(String(acc.initialBalanceSMA || 0));
+    setInitialBalanceUmum(String(acc.initialBalanceUmum || 0));
     setErrorMsg('');
     setSuccessMsg('');
     setIsModalOpen(true);
@@ -147,7 +159,10 @@ export default function COA() {
         return;
       }
 
-      const balanceValue = Number(initialBalance) || 0;
+      const valSMP = Number(initialBalanceSMP) || 0;
+      const valSMA = Number(initialBalanceSMA) || 0;
+      const valUmum = Number(initialBalanceUmum) || 0;
+      const balanceValue = valSMP + valSMA + valUmum;
 
       const accountData = {
         code: code.trim(),
@@ -155,6 +170,9 @@ export default function COA() {
         category,
         subCategory: subCategory.trim(),
         initialBalance: balanceValue,
+        initialBalanceSMP: valSMP,
+        initialBalanceSMA: valSMA,
+        initialBalanceUmum: valUmum,
         isDeletable: isEditing ? (accounts.find(a => a.id === editingAccountId)?.isDeletable ?? true) : true
       };
 
@@ -251,7 +269,7 @@ export default function COA() {
       return;
     }
     
-    const headers = ["Kode Akun", "Nama Akun", "Kategori Utama", "Sub-Kategori", "Saldo Awal"];
+    const headers = ["Kode Akun", "Nama Akun", "Kategori Utama", "Sub-Kategori", "Saldo Awal", "Saldo Awal SMP", "Saldo Awal SMA", "Saldo Awal Umum"];
     const rows = [headers];
     
     dataToExport.forEach(acc => {
@@ -260,7 +278,10 @@ export default function COA() {
         acc.name,
         acc.category,
         acc.subCategory || '',
-        (acc.initialBalance || 0).toString()
+        (acc.initialBalance || 0).toString(),
+        (acc.initialBalanceSMP || 0).toString(),
+        (acc.initialBalanceSMA || 0).toString(),
+        (acc.initialBalanceUmum || 0).toString()
       ]);
     });
     
@@ -291,7 +312,10 @@ export default function COA() {
       name: acc.name,
       category: acc.category,
       subCategory: acc.subCategory || '',
-      initialBalance: acc.initialBalance || 0
+      initialBalance: acc.initialBalance || 0,
+      initialBalanceSMP: acc.initialBalanceSMP || 0,
+      initialBalanceSMA: acc.initialBalanceSMA || 0,
+      initialBalanceUmum: acc.initialBalanceUmum || 0
     }));
 
     const jsonContent = JSON.stringify(serializableData, null, 2);
@@ -382,6 +406,9 @@ export default function COA() {
           const idxCat = headers.findIndex(h => h.includes('kat') || h.includes('cat'));
           const idxSub = headers.findIndex(h => h.includes('sub'));
           const idxBal = headers.findIndex(h => h.includes('saldo') || h.includes('balance') || h.includes('awal'));
+          const idxSMP = headers.findIndex(h => h.includes('smp'));
+          const idxSMA = headers.findIndex(h => h.includes('sma'));
+          const idxUmum = headers.findIndex(h => h.includes('umum'));
           
           if (idxCode === -1 || idxName === -1 || idxCat === -1) {
             setImportErrorMsg("Struktur kolom CSV salah. Pastikan memiliki kolom wajib: Kode Akun, Nama Akun, Kategori Utama.");
@@ -398,6 +425,18 @@ export default function COA() {
             const subCategory = idxSub !== -1 ? (row[idxSub] || '') : '';
             const balRaw = idxBal !== -1 ? row[idxBal] : '0';
             const initialBalance = parseFloat(balRaw?.replace(/[^0-9.\-]/g, '') || '0') || 0;
+            
+            const smpRaw = idxSMP !== -1 ? row[idxSMP] : '0';
+            const smaRaw = idxSMA !== -1 ? row[idxSMA] : '0';
+            const umumRaw = idxUmum !== -1 ? row[idxUmum] : '0';
+            const valSMP = parseFloat(smpRaw?.replace(/[^0-9.\-]/g, '') || '0') || 0;
+            const valSMA = parseFloat(smaRaw?.replace(/[^0-9.\-]/g, '') || '0') || 0;
+            const valUmum = parseFloat(umumRaw?.replace(/[^0-9.\-]/g, '') || '0') || 0;
+            
+            let finalBal = initialBalance;
+            if (idxSMP !== -1 || idxSMA !== -1 || idxUmum !== -1) {
+              finalBal = valSMP + valSMA + valUmum;
+            }
             
             // Normalize Category
             let category: AccountCategory = 'Aset';
@@ -419,7 +458,10 @@ export default function COA() {
               name: nameRaw?.trim() || '',
               category,
               subCategory: subCategory?.trim() || '',
-              initialBalance,
+              initialBalance: finalBal,
+              initialBalanceSMP: valSMP,
+              initialBalanceSMA: valSMA,
+              initialBalanceUmum: valUmum,
               action: 'create',
               isValid: true,
               errors: []
@@ -442,12 +484,24 @@ export default function COA() {
               category = 'Beban';
             }
 
+            const parsedSMP = Number(item.initialBalanceSMP || item.saldoAwalSMP || 0);
+            const parsedSMA = Number(item.initialBalanceSMA || item.saldoAwalSMA || 0);
+            const parsedUmum = Number(item.initialBalanceUmum || item.saldoAwalUmum || 0);
+            let finalBal = Number(item.initialBalance || item.saldoAwal || 0);
+            if (item.initialBalanceSMP !== undefined || item.initialBalanceSMA !== undefined || item.initialBalanceUmum !== undefined ||
+                item.saldoAwalSMP !== undefined || item.saldoAwalSMA !== undefined || item.saldoAwalUmum !== undefined) {
+              finalBal = parsedSMP + parsedSMA + parsedUmum;
+            }
+
             tempParsedList.push({
               code: String(item.code || item.kodeAkun || item.kode || '').trim(),
               name: String(item.name || item.nameAkun || item.nama || item.namaAkun || '').trim(),
               category,
               subCategory: String(item.subCategory || item.subKategori || '').trim(),
-              initialBalance: Number(item.initialBalance || item.saldoAwal || 0),
+              initialBalance: finalBal,
+              initialBalanceSMP: parsedSMP,
+              initialBalanceSMA: parsedSMA,
+              initialBalanceUmum: parsedUmum,
               action: 'create',
               isValid: true,
               errors: []
@@ -522,6 +576,9 @@ export default function COA() {
           category: item.category,
           subCategory: item.subCategory,
           initialBalance: item.initialBalance,
+          initialBalanceSMP: item.initialBalanceSMP || 0,
+          initialBalanceSMA: item.initialBalanceSMA || 0,
+          initialBalanceUmum: item.initialBalanceUmum || 0,
           isDeletable: true
         };
 
@@ -911,8 +968,15 @@ export default function COA() {
                     </span>
                   </td>
                   <td className="px-6 py-4 text-sm text-slate-500">{acc.subCategory || '-'}</td>
-                  <td className="px-6 py-4 text-right font-mono text-sm text-slate-800">
-                    {formatRupiah(acc.initialBalance)}
+                  <td className="px-6 py-4 text-right">
+                    <div className="font-mono text-sm font-semibold text-slate-800">{formatRupiah(acc.initialBalance)}</div>
+                    {(acc.initialBalanceSMP || acc.initialBalanceSMA || acc.initialBalanceUmum) ? (
+                      <div className="text-[10px] text-gray-400 mt-1 space-y-0.5 font-sans leading-none">
+                        {acc.initialBalanceSMP ? <div className="font-mono">SMP: {formatRupiah(acc.initialBalanceSMP)}</div> : null}
+                        {acc.initialBalanceSMA ? <div className="font-mono">SMA: {formatRupiah(acc.initialBalanceSMA)}</div> : null}
+                        {acc.initialBalanceUmum ? <div className="font-mono">Umum: {formatRupiah(acc.initialBalanceUmum)}</div> : null}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-1.5">
@@ -1027,27 +1091,62 @@ export default function COA() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Sub-Kategori</label>
-                    <input
-                      type="text"
-                      placeholder="Mis: Kas & Bank"
-                      value={subCategory}
-                      onChange={(e) => setSubCategory(e.target.value)}
-                      className="w-full px-4 py-2.5 text-sm border border-natural-border rounded-xl focus:ring-2 focus:ring-natural-primary outline-none bg-slate-50/40"
-                    />
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Sub-Kategori</label>
+                  <input
+                    type="text"
+                    placeholder="Mis: Kas & Bank"
+                    value={subCategory}
+                    onChange={(e) => setSubCategory(e.target.value)}
+                    className="w-full px-4 py-2.5 text-sm border border-natural-border rounded-xl focus:ring-2 focus:ring-natural-primary outline-none bg-slate-50/40"
+                  />
+                </div>
+
+                <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-3">
+                  <h4 className="text-xs font-bold text-slate-700 font-sans">Pemisahan Saldo Awal per Unit</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Unit SMP (RP)</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={initialBalanceSMP}
+                        onChange={(e) => setInitialBalanceSMP(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-natural-border rounded-xl focus:ring-1 focus:ring-natural-primary outline-none bg-white text-right font-mono"
+                        id="balance-smp-input"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Unit SMA (RP)</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={initialBalanceSMA}
+                        onChange={(e) => setInitialBalanceSMA(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-natural-border rounded-xl focus:ring-1 focus:ring-natural-primary outline-none bg-white text-right font-mono"
+                        id="balance-sma-input"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block font-sans">Unit Umum (RP)</label>
+                      <input
+                        type="number"
+                        placeholder="0"
+                        value={initialBalanceUmum}
+                        onChange={(e) => setInitialBalanceUmum(e.target.value)}
+                        className="w-full px-3 py-2 text-xs border border-natural-border rounded-xl focus:ring-1 focus:ring-natural-primary outline-none bg-white text-right font-mono"
+                        id="balance-umum-input"
+                      />
+                    </div>
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">Saldo Awal (RP)</label>
-                    <input
-                      type="number"
-                      placeholder="0"
-                      value={initialBalance}
-                      onChange={(e) => setInitialBalance(e.target.value)}
-                      className="w-full px-4 py-2.5 text-sm border border-natural-border rounded-xl focus:ring-2 focus:ring-natural-primary outline-none bg-slate-50/40 text-right font-mono"
-                    />
+                  <div className="flex justify-between items-center text-xs pt-2 border-t border-slate-150/50 font-sans">
+                    <span className="text-slate-400">Total Saldo Awal Gabungan:</span>
+                    <strong className="text-slate-850 font-semibold font-mono text-sm">
+                      {formatRupiah((Number(initialBalanceSMP) || 0) + (Number(initialBalanceSMA) || 0) + (Number(initialBalanceUmum) || 0))}
+                    </strong>
                   </div>
                 </div>
 

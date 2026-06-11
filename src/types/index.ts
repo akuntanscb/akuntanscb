@@ -7,6 +7,9 @@ export interface Account {
   category: AccountCategory;
   subCategory: string;
   initialBalance: number;
+  initialBalanceSMP?: number;
+  initialBalanceSMA?: number;
+  initialBalanceUmum?: number;
   isDeletable: boolean;
   order?: number;
   hideOnReport?: boolean;

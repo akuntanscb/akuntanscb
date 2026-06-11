@@ -12,7 +12,19 @@ export const getAccountBalances = async (schoolUnit?: string): Promise<AccountBa
 
   const balances: Record<string, number> = {};
   accounts.forEach(acc => {
-    balances[acc.id] = acc.initialBalance || 0;
+    if (schoolUnit && schoolUnit !== 'all' && schoolUnit !== 'Gabungan') {
+      if (schoolUnit === 'SMP') {
+        balances[acc.id] = acc.initialBalanceSMP !== undefined ? acc.initialBalanceSMP : 0;
+      } else if (schoolUnit === 'SMA') {
+        balances[acc.id] = acc.initialBalanceSMA !== undefined ? acc.initialBalanceSMA : 0;
+      } else if (schoolUnit === 'Umum') {
+        balances[acc.id] = acc.initialBalanceUmum !== undefined ? acc.initialBalanceUmum : 0;
+      } else {
+        balances[acc.id] = 0;
+      }
+    } else {
+      balances[acc.id] = acc.initialBalance || 0;
+    }
   });
 
   const filteredEntries = schoolUnit && schoolUnit !== 'all' && schoolUnit !== 'Gabungan'
@@ -111,7 +123,14 @@ export const getFinancialReports = async (schoolUnit?: string) => {
     )
   );
 
-  const totalSawalKas = cashAccounts.reduce((acc, c) => acc + (c.initialBalance || 0), 0);
+  const totalSawalKas = cashAccounts.reduce((acc, c) => {
+    if (schoolUnit && schoolUnit !== 'all' && schoolUnit !== 'Gabungan') {
+      if (schoolUnit === 'SMP') return acc + (c.initialBalanceSMP !== undefined ? c.initialBalanceSMP : 0);
+      if (schoolUnit === 'SMA') return acc + (c.initialBalanceSMA !== undefined ? c.initialBalanceSMA : 0);
+      if (schoolUnit === 'Umum') return acc + (c.initialBalanceUmum !== undefined ? c.initialBalanceUmum : 0);
+    }
+    return acc + (c.initialBalance || 0);
+  }, 0);
   const totalSakhirKas = cashAccounts.reduce((acc, c) => acc + c.balance, 0);
 
   let oprPenerimaanSiswa = 0; 
