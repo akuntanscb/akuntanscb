@@ -24,9 +24,11 @@ import {
   Download,
   Printer,
   FileSpreadsheet,
-  FileText
+  FileText,
+  Shield
 } from 'lucide-react';
 import { cn, formatRupiah } from '../lib/utils';
+import { useUserRole } from '../context/UserRoleContext';
 import { 
   getDebts, 
   createDebt, 
@@ -153,6 +155,18 @@ function sanitizeColorString(text: string): string {
 }
 
 export default function HutangPiutang() {
+  const { hasPermission, isUnitAllowed } = useUserRole();
+
+  if (!hasPermission('canDebt')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canDebt) untuk melihat atau mengelola Hutang & Piutang.</p>
+      </div>
+    );
+  }
+
   const [debts, setDebts] = useState<DebtReceivable[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -292,7 +306,8 @@ export default function HutangPiutang() {
     let aging61to90 = 0;
     let agingAbove90 = 0;
 
-    const targetedDebts = unitFilter === 'All' ? debts : debts.filter(d => (d.schoolUnit || 'Umum') === unitFilter);
+    const baseList = unitFilter === 'All' ? debts : debts.filter(d => (d.schoolUnit || 'Umum') === unitFilter);
+    const targetedDebts = baseList.filter(d => isUnitAllowed(d.schoolUnit || 'Umum'));
 
     targetedDebts.forEach((d) => {
       const activePending = d.status !== 'Lunas';
@@ -749,6 +764,9 @@ export default function HutangPiutang() {
   const filteredAndSortedDebts = React.useMemo(() => {
     return debts
       .filter((d) => {
+        // Unit restriction check
+        if (!isUnitAllowed(d.schoolUnit || 'Umum')) return false;
+
         const matchesQuery = d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
                              (d.remarks && d.remarks.toLowerCase().includes(searchQuery.toLowerCase())) ||
                              (d.dpRefNumber && d.dpRefNumber.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -777,7 +795,7 @@ export default function HutangPiutang() {
         }
         return 0;
       });
-  }, [debts, searchQuery, filterType, filterStatus, sortBy, unitFilter]);
+  }, [debts, searchQuery, filterType, filterStatus, sortBy, unitFilter, isUnitAllowed]);
 
   return (
     <div className="space-y-6 pb-12">

@@ -1,13 +1,26 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Search, Filter, BookOpen } from 'lucide-react';
+import { Search, Filter, BookOpen, Shield } from 'lucide-react';
 import { getAccounts } from '../services/accountService';
 import { getLedgerForAccount } from '../services/journalService';
 import { Account } from '../types';
 import { formatRupiah, cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { useUserRole } from '../context/UserRoleContext';
 
 export default function Ledger() {
+  const { hasPermission, isUnitAllowed } = useUserRole();
+
+  if (!hasPermission('canJournal') && !hasPermission('canCOA')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa untuk melihat Buku Besar instansi ini.</p>
+      </div>
+    );
+  }
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState('');
   const [ledgerLines, setLedgerLines] = useState<any[]>([]);
@@ -39,9 +52,12 @@ export default function Ledger() {
 
   const selectedAccount = accounts.find(a => a.id === selectedAccountId);
 
+  // Filter out restricted units
+  const allowedLedgerLines = ledgerLines.filter(line => isUnitAllowed(line.schoolUnit || 'Umum'));
+
   // Calc running balance
   let runningBalance = selectedAccount?.initialBalance || 0;
-  const processedLines = ledgerLines.map(line => {
+  const processedLines = allowedLedgerLines.map(line => {
     if (selectedAccount?.category === 'Aset' || selectedAccount?.category === 'Beban') {
       runningBalance += (line.debit - line.credit);
     } else {

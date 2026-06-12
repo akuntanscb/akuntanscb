@@ -134,6 +134,36 @@
         "depreciationHistory": { "type": "array", "description": "Riwayat penyusutan yang terposting" }
       },
       "required": ["code", "name", "purchaseDate", "purchaseCost", "usefulLife", "residualValue", "depreciationMethod", "status", "createdBy", "createdAt"]
+    },
+    "UserRole": {
+      "title": "Aturan Akses Pengguna",
+      "description": "Aturan hak akses dan batasan operasional pengguna.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "description": "Email Google Pengguna" },
+        "name": { "type": "string", "description": "Nama Pengguna" },
+        "role": { "type": "string", "enum": ["admin", "operator", "viewer"], "description": "Peran Utama" },
+        "permissions": { "type": "object", "description": "Izin granular" },
+        "restrictedUnits": { "type": "array", "description": "Unit sekolah yang dibatasi" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "role", "permissions"]
+    },
+    "ActivityLog": {
+      "title": "Catatan Aktivitas",
+      "description": "Log riwayat transaksi dan aktivitas sistem.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "action": { "type": "string" },
+        "category": { "type": "string" },
+        "details": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userEmail", "userName", "action", "category", "timestamp"]
     }
   },
   "firestore": {
@@ -164,6 +194,14 @@
     "fixed_assets": {
       "schema": "FixedAsset",
       "description": "Koleksi pencatatan inventaris aset tetap."
+    },
+    "user_roles": {
+      "schema": "UserRole",
+      "description": "Koleksi peran dan batasan akses pengguna."
+    },
+    "activity_logs": {
+      "schema": "ActivityLog",
+      "description": "Koleksi log riwayat aktivitas pengguna."
     }
   }
 }

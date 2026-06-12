@@ -125,3 +125,35 @@ export interface FixedAsset {
   schoolUnit?: 'SMP' | 'SMA' | 'Umum';
 }
 
+export interface UserRole {
+  id?: string;
+  email: string;
+  name?: string;
+  role: 'admin' | 'operator' | 'viewer';
+  permissions: {
+    canCOA: boolean;
+    canJournal: boolean;
+    canInvoices: boolean;
+    canDebt: boolean;
+    canFixedAssets: boolean;
+    canSettings: boolean;
+    canUsers: boolean;
+    canTrash: boolean;
+  };
+  restrictedUnits: ('SMP' | 'SMA' | 'Umum')[];
+  createdAt: any;
+  updatedAt: any;
+}
+
+export interface ActivityLog {
+  id?: string;
+  userId: string;
+  userEmail: string;
+  userName: string;
+  action: string;
+  category: 'COA' | 'Journal' | 'Invoice' | 'Debts' | 'Assets' | 'Settings' | 'Auth' | 'Users' | 'Trash';
+  details: string;
+  timestamp: any; // Firestore Timestamp or Date
+}
+
+

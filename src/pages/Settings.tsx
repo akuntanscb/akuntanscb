@@ -24,10 +24,7 @@ import {
   Download,
   AlertTriangle,
   Archive,
-  FileSpreadsheet,
-  Globe,
-  ExternalLink,
-  Copy
+  FileSpreadsheet
 } from 'lucide-react';
 import { formatRupiah } from '../lib/utils';
 import { getAccounts } from '../services/accountService';
@@ -57,26 +54,6 @@ export default function Settings() {
   const [colorTheme, setColorTheme] = useState(settings.colorTheme);
   const [invoiceTemplate, setInvoiceTemplate] = useState(settings.invoiceTemplate);
 
-  // Custom Firebase Connection States (Direct UI Configuration)
-  const getInitialFbConfig = () => {
-    try {
-      const saved = localStorage.getItem('CUSTOM_FIREBASE_CONFIG');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return null;
-  };
-  const initialFb = getInitialFbConfig();
-  const [fbApiKey, setFbApiKey] = useState(initialFb?.apiKey || '');
-  const [fbProjectId, setFbProjectId] = useState(initialFb?.projectId || '');
-  const [fbAuthDomain, setFbAuthDomain] = useState(initialFb?.authDomain || '');
-  const [fbAppId, setFbAppId] = useState(initialFb?.appId || '');
-  const [fbFirestoreDatabaseId, setFbFirestoreDatabaseId] = useState(initialFb?.firestoreDatabaseId || '(default)');
-  const [fbStorageBucket, setFbStorageBucket] = useState(initialFb?.storageBucket || '');
-  const [fbMessagingSenderId, setFbMessagingSenderId] = useState(initialFb?.messagingSenderId || '');
-  const [isUsingCustomFb, setIsUsingCustomFb] = useState(!!initialFb);
-  const [fbSuccessMsg, setFbSuccessMsg] = useState('');
-  const [fbErrorMsg, setFbErrorMsg] = useState('');
-
   // Status indicators
   const [isSaving, setIsSaving] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
@@ -97,7 +74,6 @@ export default function Settings() {
   
   const [dbError, setDbError] = useState('');
   const [dbSuccess, setDbSuccess] = useState('');
-  const [copiedDomain, setCopiedDomain] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -148,12 +124,6 @@ export default function Settings() {
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleCopyDomain = () => {
-    navigator.clipboard.writeText("siascb.vercel.app");
-    setCopiedDomain(true);
-    setTimeout(() => setCopiedDomain(false), 3000);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,56 +334,6 @@ export default function Settings() {
       alert('Error: ' + err.message);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleSaveFbConfig = (e: React.FormEvent) => {
-    e.preventDefault();
-    setFbErrorMsg('');
-    setFbSuccessMsg('');
-
-    if (!fbApiKey.trim() || !fbProjectId.trim()) {
-      setFbErrorMsg('API Key dan Project ID wajib diisi!');
-      return;
-    }
-
-    const config = {
-      apiKey: fbApiKey.trim(),
-      projectId: fbProjectId.trim(),
-      authDomain: fbAuthDomain.trim() || `${fbProjectId.trim()}.firebaseapp.com`,
-      appId: fbAppId.trim(),
-      firestoreDatabaseId: fbFirestoreDatabaseId.trim() || '(default)',
-      storageBucket: fbStorageBucket.trim() || `${fbProjectId.trim()}.firebasestorage.app`,
-      messagingSenderId: fbMessagingSenderId.trim(),
-    };
-
-    try {
-      localStorage.setItem('CUSTOM_FIREBASE_CONFIG', JSON.stringify(config));
-      setIsUsingCustomFb(true);
-      setFbSuccessMsg('Berhasil menyimpan konfigurasi Firebase! Halaman akan dimuat ulang dalam 3 detik untuk menerapkan kredensial baru...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 3000);
-    } catch (err: any) {
-      setFbErrorMsg('Gagal menyimpan ke penyimpanan lokal: ' + err.message);
-    }
-  };
-
-  const handleResetFbConfig = () => {
-    if (window.confirm('Apakah Anda yakin ingin menghapus konfigurasi kustom ini dan kembali menggunakan Sandbox default (kingly-object)?')) {
-      localStorage.removeItem('CUSTOM_FIREBASE_CONFIG');
-      setFbApiKey('');
-      setFbProjectId('');
-      setFbAuthDomain('');
-      setFbAppId('');
-      setFbFirestoreDatabaseId('(default)');
-      setFbStorageBucket('');
-      setFbMessagingSenderId('');
-      setIsUsingCustomFb(false);
-      setFbSuccessMsg('Berhasil mereset konfigurasi ke Sandbox bawaan! Halaman akan dimuat ulang dalam 2 detik...');
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
     }
   };
 
@@ -892,284 +812,6 @@ export default function Settings() {
           </button>
         </div>
       </form>
-
-      {/* DIRECT FIREBASE PROJECT CONNECTION CUSTOMIZER */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-natural-border shadow-sm space-y-6 mt-8 text-left" id="custom-firebase-setup">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-slate-100 pb-4 justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-orange-50 text-orange-600 flex items-center justify-center shrink-0">
-              <Database className="w-6 h-6 text-orange-600" />
-            </div>
-            <div>
-              <h3 className="text-md font-serif italic text-slate-900 font-bold">Koneksi Proyek Firebase Kustom Anda</h3>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono">Custom Firebase Credentials Overrides</p>
-            </div>
-          </div>
-          <div>
-            {isUsingCustomFb ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-150">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                Proyek Mandiri Aktif
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-150">
-                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                Sandbox Default (Kingly)
-              </span>
-            )}
-          </div>
-        </div>
-
-        <p className="text-xs text-slate-650 leading-relaxed font-sans">
-          Secara bawaan, aplikasi ini menggunakan database Sandbox bersama milik AI Studio (<strong>kingly-object-fwh20</strong>). Jika Anda memiliki proyek Firebase (Firestore & Auth) sendiri dan ingin menggunakannya, Anda dapat memasukkan kredensialnya di bawah ini. Konfigurasi Anda akan disimpan dengan aman di dalam browser Anda, dan aplikasi akan langsung beralih menggunakan basis data Anda sendiri secara eksklusif.
-        </p>
-
-        {fbSuccessMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-emerald-50 border border-emerald-150 rounded-2xl flex items-center gap-3 text-emerald-800 text-sm font-semibold"
-          >
-            <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-            <span>{fbSuccessMsg}</span>
-          </motion.div>
-        )}
-
-        {fbErrorMsg && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="p-4 bg-rose-50 border border-rose-150 rounded-2xl flex items-center gap-3 text-rose-800 text-sm font-semibold"
-          >
-            <AlertTriangle className="w-5 h-5 text-rose-650 shrink-0" />
-            <span>{fbErrorMsg}</span>
-          </motion.div>
-        )}
-
-        <form onSubmit={handleSaveFbConfig} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-api-key">Firebase API Key <span className="text-rose-500">*</span></label>
-              <input
-                id="fb-api-key"
-                type="text"
-                required
-                value={fbApiKey}
-                onChange={(e) => setFbApiKey(e.target.value)}
-                placeholder="Contoh: AIzaSyD..."
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-project-id">Firebase Project ID <span className="text-rose-500">*</span></label>
-              <input
-                id="fb-project-id"
-                type="text"
-                required
-                value={fbProjectId}
-                onChange={(e) => setFbProjectId(e.target.value)}
-                placeholder="Contoh: proyek-keuangan-scb"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-app-id">Firebase App ID <span className="text-rose-500">*</span></label>
-              <input
-                id="fb-app-id"
-                type="text"
-                required
-                value={fbAppId}
-                onChange={(e) => setFbAppId(e.target.value)}
-                placeholder="Contoh: 1:1234567890:web:1234abc5678de"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-auth-domain">Auth Domain</label>
-              <input
-                id="fb-auth-domain"
-                type="text"
-                value={fbAuthDomain}
-                onChange={(e) => setFbAuthDomain(e.target.value)}
-                placeholder="Kosongkan untuk otomatis: project-id.firebaseapp.com"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-slate-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-firestore-db-id">Firestore Database ID</label>
-              <input
-                id="fb-firestore-db-id"
-                type="text"
-                value={fbFirestoreDatabaseId}
-                onChange={(e) => setFbFirestoreDatabaseId(e.target.value)}
-                placeholder="Default: (default)"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-slate-500"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-storage-bucket">Storage Bucket</label>
-              <input
-                id="fb-storage-bucket"
-                type="text"
-                value={fbStorageBucket}
-                onChange={(e) => setFbStorageBucket(e.target.value)}
-                placeholder="Kosongkan untuk otomatis: project-id.firebasestorage.app"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-slate-500"
-              />
-            </div>
-
-            <div className="space-y-1.5 md:col-span-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-widest" htmlFor="fb-messaging-sender-id">Messaging Sender ID</label>
-              <input
-                id="fb-messaging-sender-id"
-                type="text"
-                value={fbMessagingSenderId}
-                onChange={(e) => setFbMessagingSenderId(e.target.value)}
-                placeholder="Contoh: 1234567890"
-                className="w-full px-4 py-2.5 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all text-slate-500"
-              />
-            </div>
-          </div>
-
-          <div className="pt-2 flex flex-col sm:flex-row gap-3 justify-end items-center">
-            {isUsingCustomFb && (
-              <button
-                id="btn-reset-fb-config"
-                type="button"
-                onClick={handleResetFbConfig}
-                className="w-full sm:w-auto px-6 py-2.5 bg-rose-50 text-rose-700 font-bold text-xs uppercase tracking-wider rounded-xl transition-all border border-rose-150 flex items-center justify-center gap-2 hover:bg-rose-100 cursor-pointer"
-              >
-                <Trash2 className="w-4 h-4 text-rose-600" />
-                <span>Kembalikan ke Sandbox Default</span>
-              </button>
-            )}
-            
-            <button
-              id="btn-save-fb-config"
-              type="submit"
-              className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:brightness-110 text-white font-bold text-xs uppercase tracking-wider rounded-xl transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <Check className="w-4 h-4 text-white" />
-              <span>Simpan & Hubungkan Proyek Anda</span>
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* INTEGRASI DOMAIN PRODUKSI VERCEL / FIREBASE AUTHORIZED DOMAIN */}
-      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-natural-border shadow-sm space-y-6 mt-8 text-left">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-slate-100 pb-4 justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-slate-100 text-indigo-600 flex items-center justify-center shrink-0">
-              <Globe className="w-6 h-6 text-indigo-600" />
-            </div>
-            <div>
-              <h3 className="text-lg font-serif italic text-slate-900 font-bold">Integrasi & Otorisasi Domain Produksi</h3>
-              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono">Custom Vercel Domain & Firebase Auth Guard</p>
-            </div>
-          </div>
-          <div>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-150 animate-pulse animate-duration-3000">
-              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-              Aktif & Terhubung
-            </span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-4 space-y-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
-            <div className="space-y-1">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Domain Utama (Vercel)</span>
-              <div className="flex items-center gap-2 mt-1">
-                <code className="text-sm font-semibold font-mono text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-xl select-all break-all block flex-1 text-center">
-                  siascb.vercel.app
-                </code>
-                <button
-                  type="button"
-                  onClick={handleCopyDomain}
-                  className="p-2.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl border border-indigo-150 transition-all cursor-pointer relative"
-                  title="Salin Domain"
-                >
-                  {copiedDomain ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                </button>
-              </div>
-              {copiedDomain && (
-                <span className="text-[10px] text-emerald-600 font-medium block text-right mt-1 anim-fade">✓ Berhasil disalin!</span>
-              )}
-            </div>
-
-            <div className="pt-2 text-xs space-y-2 text-slate-500 leading-relaxed font-sans">
-              <p>
-                Domain produksi ini digunakan sebagai pusat navigasi visual utama seluruh platform sistem informasi akuntansi Madrasah <strong>Sekolah Cendekia Baznas (SCB)</strong>.
-              </p>
-              <p>
-                Semua pembaruan data, jurnal, piutang, dan pelaporan yang Anda kerjakan disinkronisasikan secara langsung dan aman.
-              </p>
-            </div>
-          </div>
-
-          <div className="lg:col-span-8 space-y-4">
-            <h4 className="text-sm font-bold text-slate-800 font-sans flex items-center gap-2">
-              <Shield className="w-4 h-4 text-indigo-600" />
-              Solusi Mengatasi Error <code className="text-xs bg-rose-50 text-rose-700 px-1 py-0.5 rounded">auth/unauthorized-domain</code> di Vercel
-            </h4>
-            
-            <p className="text-xs text-slate-600 leading-relaxed font-sans">
-              Firebase Authentication menolak proses masuk menggunakan akun Google dari domain <strong>siascb.vercel.app</strong> karena domain tersebut belum diizinkan dalam daftar Authorized Domains di Firebase.
-            </p>
-
-            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-3">
-              <h5 className="text-xs font-bold text-slate-900 font-mono">Langkah Rekomendasi: Hubungkan Proyek Firebase Anda Sendiri</h5>
-              <p className="text-[11px] text-slate-600 leading-relaxed font-sans">
-                Karena proyek database bawaan AI Studio (<strong className="font-mono text-indigo-900">kingly-object-fwh20</strong>) adalah lingkungan sandbox yang terisolasi dan diproteksi sistem, Anda tidak dapat mengakses konsolnya untuk menambahkan domain baru secara manual.
-              </p>
-              <p className="text-[11px] text-slate-600 leading-relaxed font-sans">
-                Untuk pengoperasian produksi jangka panjang yang mandiri dan aman, silakan buat proyek Firebase Anda sendiri secara gratis, lalu konfigurasikan variabel lingkungan berikut di panel pengaturan <strong>Vercel (Dashboard &gt; Settings &gt; Environment Variables)</strong> Anda tanpa perlu mengubah kode aplikasi:
-              </p>
-              <div className="bg-slate-900 text-slate-200 p-3.5 rounded-lg text-[10px] font-mono whitespace-pre overflow-x-auto leading-relaxed mt-2 select-all font-sans">
-{`# Masukkan data kredensial Firebase produksi Anda sendiri di Dashboard Vercel:
-VITE_FIREBASE_API_KEY="AIzaSy..."
-VITE_FIREBASE_AUTH_DOMAIN="proyek-anda.firebaseapp.com"
-VITE_FIREBASE_PROJECT_ID="proyek-anda"
-VITE_FIREBASE_APP_ID="1:4414...:web:..."
-VITE_FIREBASE_FIRESTORE_DB_ID="(default)"
-VITE_FIREBASE_STORAGE_BUCKET="proyek-anda.firebasestorage.app"
-VITE_FIREBASE_MESSAGING_SENDER_ID="44148..."`}
-              </div>
-            </div>
-
-            <div className="relative border-l-2 border-indigo-100 pl-4 ml-2 space-y-4 py-1">
-              <div className="relative">
-                <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-indigo-650 border border-white"></div>
-                <h5 className="text-xs font-bold text-slate-800">1. Konfigurasikan Otorisasi di Firebase Console Anda</h5>
-                <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 font-sans">
-                  Di konsol Firebase Anda sendiri, navigasikan ke menu sidebar <strong>Build &gt; Authentication</strong>, pilih tab <strong>Settings</strong> di bagian atas.
-                </p>
-              </div>
-
-              <div className="relative">
-                <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-indigo-450 border border-white"></div>
-                <h5 className="text-xs font-bold text-slate-800">2. Daftarkan Domain siascb.vercel.app</h5>
-                <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 font-sans">
-                  Di bawah daftar <strong>Authorized Domains</strong>, klik tombol <strong>Add Domain</strong>, rekatkan <code className="font-mono text-[10px] bg-slate-100 px-1 text-slate-700">siascb.vercel.app</code>, dan tekan <strong>Save</strong>.
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-amber-50/70 rounded-xl border border-amber-150 p-3.5 flex items-start gap-2.5 text-[10.5px] text-amber-800 leading-relaxed">
-              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <strong>Pemberitahuan Sinkronisasi:</strong> Setelah Anda menambahkan variabel lingkungan Firebase di atas di Vercel, lakukan <strong>Redeploy</strong> di Vercel. Aplikasi Anda akan langsung beralih ke database mandiri Anda, dan login Google akan bekerja 100% dengan lancar di domain utama tanpa error apapun!
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* DATABASE MAINTENANCE SYSTEM */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-natural-border shadow-sm space-y-8 mt-8">

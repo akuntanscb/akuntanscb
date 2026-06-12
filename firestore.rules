@@ -164,5 +164,31 @@ service cloud.firestore {
       allow update: if isSignedIn() && isOwner(existing()) && isValidFixedAsset(incoming());
       allow delete: if isSignedIn() && isOwner(existing());
     }
+
+    // --- User Roles (Aturan Akses) ---
+    function isValidUserRole(data) {
+      return data.email is string && data.email.size() <= 200 &&
+             data.role in ['admin', 'operator', 'viewer'] &&
+             data.permissions is map;
+    }
+
+    match /user_roles/{email} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com' && isValidUserRole(incoming());
+      allow delete: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com' && email.lower() != 'keuangan.scb@gmail.com';
+    }
+
+    // --- Activity Logs ---
+    function isValidActivityLog(data) {
+      return data.userId == request.auth.uid &&
+             data.action is string && data.action.size() <= 1000 &&
+             data.category is string && data.category.size() <= 100;
+    }
+
+    match /activity_logs/{logId} {
+      allow read: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com';
+      allow create: if isSignedIn() && isValidActivityLog(incoming());
+      allow update, delete: if false;
+    }
   }
 }

@@ -18,7 +18,8 @@ import {
   PlusCircle,
   Info,
   Calendar,
-  DollarSign
+  DollarSign,
+  Shield
 } from 'lucide-react';
 import { formatRupiah, cn, terbilang } from '../lib/utils';
 import { 
@@ -33,6 +34,7 @@ import { Invoice, InvoiceItem } from '../types';
 import { auth } from '../lib/firebase';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { useUserRole } from '../context/UserRoleContext';
 
 // Helper to convert modern oklch() color syntax to universally supported hsla() format
 function oklchToHsl(oklchStr: string): string {
@@ -147,6 +149,18 @@ function sanitizeColorString(text: string): string {
 }
 
 export default function Invoices() {
+  const { hasPermission, isUnitAllowed } = useUserRole();
+
+  if (!hasPermission('canInvoices')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canInvoices) untuk melihat atau mengelola Faktur keuangan.</p>
+      </div>
+    );
+  }
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [pdfLoading, setPdfLoading] = useState<boolean>(false);
@@ -575,6 +589,9 @@ export default function Invoices() {
   // Memoized lists handling search & filters
   const filteredInvoices = useMemo(() => {
     return invoices.filter(inv => {
+      // Unit restriction check
+      if (!isUnitAllowed(inv.schoolUnit || 'Umum')) return false;
+
       const matchSearch = 
         inv.invoiceNumber.toLowerCase().includes(searchTerm.toLowerCase()) || 
         inv.recipient.toLowerCase().includes(searchTerm.toLowerCase());
@@ -584,7 +601,7 @@ export default function Invoices() {
       
       return matchSearch && matchStatus && matchUnit;
     });
-  }, [invoices, searchTerm, statusFilter, unitFilter]);
+  }, [invoices, searchTerm, statusFilter, unitFilter, isUnitAllowed]);
 
   // Overall Financial stats calculating
   const stats = useMemo(() => {
@@ -592,7 +609,8 @@ export default function Invoices() {
     let totalUnpaid = 0;
     let totalPaid = 0;
 
-    const targetList = unitFilter === 'All' ? invoices : invoices.filter(i => (i.schoolUnit || 'Umum') === unitFilter);
+    const baseList = unitFilter === 'All' ? invoices : invoices.filter(i => (i.schoolUnit || 'Umum') === unitFilter);
+    const targetList = baseList.filter(inv => isUnitAllowed(inv.schoolUnit || 'Umum'));
 
     targetList.forEach(inv => {
       totalInvoiced += inv.total || 0;
@@ -604,7 +622,7 @@ export default function Invoices() {
     });
 
     return { totalInvoiced, totalUnpaid, totalPaid };
-  }, [invoices]);
+  }, [invoices, unitFilter, isUnitAllowed]);
 
   return (
     <div className="space-y-6">

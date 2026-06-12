@@ -24,6 +24,8 @@ import { Account, JournalLine, JournalEntry, DebtReceivable } from '../types';
 import { auth } from '../lib/firebase';
 import { formatRupiah, cn } from '../lib/utils';
 import { format } from 'date-fns';
+import { useUserRole } from '../context/UserRoleContext';
+import { Shield } from 'lucide-react';
 
 interface ParsedEntry {
   dateStr: string;
@@ -41,6 +43,18 @@ interface ParsedEntry {
 }
 
 export default function Journal() {
+  const { hasPermission, isUnitAllowed } = useUserRole();
+
+  if (!hasPermission('canJournal')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canJournal) untuk melihat atau mencatat Jurnal Umum.</p>
+      </div>
+    );
+  }
+
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [debts, setDebts] = useState<DebtReceivable[]>([]);
@@ -236,6 +250,11 @@ export default function Journal() {
 
   // Computed Filtered Entries
   const filteredEntries = entries.filter(entry => {
+    // 0. Unit restriction check
+    if (!isUnitAllowed(entry.schoolUnit || 'Umum')) {
+      return false;
+    }
+
     // 1. Text Search (Description, Reference, PIC, or account details)
     if (filterText) {
       const lowerText = filterText.toLowerCase();

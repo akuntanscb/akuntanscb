@@ -87,7 +87,8 @@ export const getLedgerForAccount = async (accountId: string): Promise<any[]> => 
           description: entry.description,
           reference: entry.reference,
           debit: line.debit,
-          credit: line.credit
+          credit: line.credit,
+          schoolUnit: entry.schoolUnit || 'Umum'
         });
       }
     });

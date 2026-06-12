@@ -16,18 +16,14 @@ import {
   Sliders,
   Database,
   Trash2,
-  TrendingDown,
-  Globe,
-  AlertTriangle,
-  Check,
-  Copy,
-  ExternalLink
+  TrendingDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { auth, firebaseConfig } from '../../lib/firebase';
-import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
+import { signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { useSettings } from '../../context/SettingsContext';
+import { useUserRole } from '../../context/UserRoleContext';
 
 interface ShellProps {
   children: React.ReactNode;
@@ -35,17 +31,12 @@ interface ShellProps {
 
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const { user, userRole, isLoadingRole, hasPermission } = useUserRole();
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const location = useLocation();
   const { settings, t } = useSettings();
 
-  useEffect(() => {
-    return onAuthStateChanged(auth, (u) => {
-      setUser(u);
-    });
-  }, []);
 
   const handleLogin = async () => {
     if (isLoggingIn) return;
@@ -87,26 +78,49 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
     signOut(auth);
   };
 
-  const navItems = [
-    { name: t('dashboard'), path: '/', icon: LayoutDashboard },
-    { name: t('journal'), path: '/jurnal', icon: BookOpen },
-    { name: t('ledger'), path: '/buku-besar', icon: Database },
-    { name: t('invoices'), path: '/faktur', icon: Receipt },
-    { name: t('debts'), path: '/hutang-piutang', icon: Users },
+  const rawNavItems = [
+    { name: t('dashboard'), path: '/', icon: LayoutDashboard, visible: true },
+    { name: t('journal'), path: '/jurnal', icon: BookOpen, visible: hasPermission('canJournal') },
+    { name: t('ledger'), path: '/buku-besar', icon: Database, visible: hasPermission('canJournal') || hasPermission('canCOA') },
+    { name: t('invoices'), path: '/faktur', icon: Receipt, visible: hasPermission('canInvoices') },
+    { name: t('debts'), path: '/hutang-piutang', icon: Users, visible: hasPermission('canDebt') },
     { 
       name: settings.language === 'en' ? 'Fixed Assets' : (settings.language === 'ar' ? 'الأصول الثابتة' : 'Aset Tetap'), 
       path: '/aset-tetap', 
-      icon: TrendingDown 
+      icon: TrendingDown,
+      visible: hasPermission('canFixedAssets')
     },
-    { name: t('reports'), path: '/laporan', icon: PieChart },
-    { name: t('coa'), path: '/coa', icon: Sliders },
-    { name: t('settings'), path: '/pengaturan', icon: Settings },
+    { name: t('reports'), path: '/laporan', icon: PieChart, visible: true },
+    { name: t('coa'), path: '/coa', icon: Sliders, visible: hasPermission('canCOA') },
+    { name: t('settings'), path: '/pengaturan', icon: Settings, visible: hasPermission('canSettings') },
     { 
       name: settings.language === 'en' ? 'Recycle Bin' : (settings.language === 'ar' ? 'سلة المهملات' : 'Tempat Sampah'), 
       path: '/trash', 
-      icon: Trash2 
+      icon: Trash2,
+      visible: hasPermission('canTrash')
     },
+    {
+      name: settings.language === 'en' ? 'Access & Logs' : (settings.language === 'ar' ? 'الصلاحيات والعمليات' : 'Aturan & Log'),
+      path: '/akses-log',
+      icon: Shield,
+      visible: userRole?.role === 'admin'
+    }
   ];
+
+  const navItems = rawNavItems.filter(item => item.visible);
+
+  if (user && isLoadingRole) {
+    return (
+      <div className="min-h-screen bg-neutral-bg flex items-center justify-center p-4">
+        <div className="text-center space-y-4">
+          <div className="w-10 h-10 border-4 border-natural-primary border-t-transparent rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--color-natural-primary) transparent var(--color-natural-primary) transparent' }}></div>
+          <p className="text-sm font-semibold text-gray-500">
+            {settings.language === 'en' ? 'Checking access rules...' : (settings.language === 'ar' ? 'جاري التحقق من الصلاحيات...' : 'Memuat aturan hak akses...')}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -131,73 +145,8 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">{settings.systemSubName}</p>
 
           {authError && (
-            <div className="mb-4">
-              <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs text-center font-semibold leading-relaxed">
-                {authError}
-              </div>
-              
-              {authError.toLowerCase().includes('unauthorized-domain') && (
-                <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-left text-xs space-y-3">
-                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2 mb-2 font-bold text-slate-800">
-                    <Sliders className="w-4 h-4 text-indigo-650" />
-                    <span>Panel Diagnostik & Solusi</span>
-                  </div>
-                  
-                  <div className="space-y-1.5 font-mono text-[10.5px]">
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Domain Deteksi:</span>
-                      <span className="text-slate-800 font-bold select-all bg-white px-1 border border-slate-200 rounded">{window.location.hostname}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Proyek Terbaca:</span>
-                      <span className="text-slate-800 font-bold bg-white px-1 border border-slate-200 rounded">{firebaseConfig.projectId}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-slate-500">Status Koneksi:</span>
-                      {firebaseConfig.projectId === 'kingly-object-fwh20' ? (
-                        <span className="text-amber-600 font-bold bg-amber-50 px-1 border border-amber-250 rounded">Sandbox AI Studio</span>
-                      ) : (
-                        <span className="text-emerald-600 font-bold bg-emerald-50 px-1 border border-emerald-250 rounded">Produksi (Kustom)</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {firebaseConfig.projectId === 'kingly-object-fwh20' ? (
-                    <div className="space-y-2 text-slate-600 border-t border-slate-150 pt-2 leading-relaxed text-[11px] font-sans">
-                      <p className="text-rose-700 font-medium">
-                        ⚠️ <strong>Penyebab Penting:</strong> Aplikasi Anda di Vercel masih menggunakan Database Sandbox default AI Studio. Domain Vercel Anda tidak diotorisasi di proyek sandbox ini.
-                      </p>
-                      <p>
-                        💡 <strong>Langkah Penyelesaian:</strong>
-                      </p>
-                      <ol className="list-decimal pl-4 space-y-1.5 text-slate-700">
-                        <li>Pastikan Anda sudah menginput semua data environment variables Firebase (seperti API Key, Project ID, dll.) di dashboard Vercel Anda.</li>
-                        <li><strong>Langkah Kunci:</strong> Di Vercel, buka menu <strong>Deployments</strong>, klik tombol opsi (titik tiga) di deployment terakhir Anda, lalu pilih <strong>Redeploy</strong>.</li>
-                        <li>Ini karena Vite memerlukan kompilasi ulang (rebuild) untuk membaca dan memaketkan environment variables baru Anda ke dalam file produksi.</li>
-                      </ol>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 text-slate-600 border-t border-slate-150 pt-2 leading-relaxed text-[11px] font-sans">
-                      <p className="text-emerald-700 font-medium font-semibold">
-                        ✅ <strong>Status:</strong> Aplikasi sudah berhasil terhubung ke Proyek Firebase Kustom Anda sendiri ({firebaseConfig.projectId})!
-                      </p>
-                      <p className="text-amber-700 font-medium">
-                        ⚠️ <strong>Penyebab:</strong> Firebase Console Anda belum memasukkan domain Vercel ini sebagai domain callback yang valid.
-                      </p>
-                      <p>
-                        💡 <strong>Langkah Penyelesaian:</strong>
-                      </p>
-                      <ol className="list-decimal pl-4 space-y-1.5 text-slate-700">
-                        <li>Buka konsol Firebase proyek Anda.</li>
-                        <li>Masuk ke menu sidebar <strong>Build &gt; Authentication</strong>, lalu pilih tab <strong>Settings</strong> di bagian atas.</li>
-                        <li>Cari daftar <strong>Authorized Domains</strong> di bawah halaman, klik tombol <strong>Add Domain</strong>.</li>
-                        <li>Masukkan domain berikut secara tepat (tanpa format http): <code className="font-mono bg-slate-100 px-1 border border-slate-200 rounded">{window.location.hostname}</code></li>
-                        <li>Klik <strong>Save</strong>. Domain akan beres dan Anda sudah bisa masuk dengan Google secara lancar!</li>
-                      </ol>
-                    </div>
-                  )}
-                </div>
-              )}
+            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs text-center font-semibold leading-relaxed">
+              {authError}
             </div>
           )}
 
