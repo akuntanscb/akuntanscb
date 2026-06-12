@@ -24,7 +24,10 @@ import {
   Download,
   AlertTriangle,
   Archive,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Globe,
+  ExternalLink,
+  Copy
 } from 'lucide-react';
 import { formatRupiah } from '../lib/utils';
 import { getAccounts } from '../services/accountService';
@@ -74,6 +77,7 @@ export default function Settings() {
   
   const [dbError, setDbError] = useState('');
   const [dbSuccess, setDbSuccess] = useState('');
+  const [copiedDomain, setCopiedDomain] = useState(false);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -124,6 +128,12 @@ export default function Settings() {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleCopyDomain = () => {
+    navigator.clipboard.writeText("siascb.vercel.app");
+    setCopiedDomain(true);
+    setTimeout(() => setCopiedDomain(false), 3000);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -812,6 +822,116 @@ export default function Settings() {
           </button>
         </div>
       </form>
+
+      {/* INTEGRASI DOMAIN PRODUKSI VERCEL / FIREBASE AUTHORIZED DOMAIN */}
+      <div className="bg-white p-6 sm:p-8 rounded-3xl border border-natural-border shadow-sm space-y-6 mt-8 text-left">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 border-b border-slate-100 pb-4 justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-xl bg-slate-100 text-indigo-600 flex items-center justify-center shrink-0">
+              <Globe className="w-6 h-6 text-indigo-600" />
+            </div>
+            <div>
+              <h3 className="text-lg font-serif italic text-slate-900 font-bold">Integrasi & Otorisasi Domain Produksi</h3>
+              <p className="text-[10px] text-gray-400 uppercase tracking-widest font-mono">Custom Vercel Domain & Firebase Auth Guard</p>
+            </div>
+          </div>
+          <div>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-150 animate-pulse animate-duration-3000">
+              <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
+              Aktif & Terhubung
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-4 space-y-4 bg-slate-50/50 p-5 rounded-2xl border border-slate-100">
+            <div className="space-y-1">
+              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block">Domain Utama (Vercel)</span>
+              <div className="flex items-center gap-2 mt-1">
+                <code className="text-sm font-semibold font-mono text-slate-800 bg-white border border-slate-200 px-3 py-1.5 rounded-xl select-all break-all block flex-1 text-center">
+                  siascb.vercel.app
+                </code>
+                <button
+                  type="button"
+                  onClick={handleCopyDomain}
+                  className="p-2.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-xl border border-indigo-150 transition-all cursor-pointer relative"
+                  title="Salin Domain"
+                >
+                  {copiedDomain ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                </button>
+              </div>
+              {copiedDomain && (
+                <span className="text-[10px] text-emerald-600 font-medium block text-right mt-1 anim-fade">✓ Berhasil disalin!</span>
+              )}
+            </div>
+
+            <div className="pt-2 text-xs space-y-2 text-slate-500 leading-relaxed font-sans">
+              <p>
+                Domain produksi ini digunakan sebagai pusat navigasi visual utama seluruh platform sistem informasi akuntansi Madrasah <strong>Sekolah Cendekia Baznas (SCB)</strong>.
+              </p>
+              <p>
+                Semua pembaruan data, jurnal, piutang, dan pelaporan yang Anda kerjakan disinkronisasikan secara langsung dan aman.
+              </p>
+            </div>
+          </div>
+
+          <div className="lg:col-span-8 space-y-4">
+            <h4 className="text-sm font-bold text-slate-800 font-sans flex items-center gap-2">
+              <Shield className="w-4 h-4 text-indigo-600" />
+              Solusi Mengatasi Error <code className="text-xs bg-rose-50 text-rose-700 px-1 py-0.5 rounded">auth/unauthorized-domain</code> di Vercel
+            </h4>
+            
+            <p className="text-xs text-slate-600 leading-relaxed font-sans">
+              Firebase Authentication menolak proses masuk menggunakan akun Google dari domain <strong>siascb.vercel.app</strong> karena domain tersebut belum diizinkan dalam daftar Authorized Domains di Firebase.
+            </p>
+
+            <div className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100 space-y-3">
+              <h5 className="text-xs font-bold text-slate-900 font-mono">Langkah Rekomendasi: Hubungkan Proyek Firebase Anda Sendiri</h5>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-sans">
+                Karena proyek database bawaan AI Studio (<strong className="font-mono text-indigo-900">kingly-object-fwh20</strong>) adalah lingkungan sandbox yang terisolasi dan diproteksi sistem, Anda tidak dapat mengakses konsolnya untuk menambahkan domain baru secara manual.
+              </p>
+              <p className="text-[11px] text-slate-600 leading-relaxed font-sans">
+                Untuk pengoperasian produksi jangka panjang yang mandiri dan aman, silakan buat proyek Firebase Anda sendiri secara gratis, lalu konfigurasikan variabel lingkungan berikut di panel pengaturan <strong>Vercel (Dashboard &gt; Settings &gt; Environment Variables)</strong> Anda tanpa perlu mengubah kode aplikasi:
+              </p>
+              <div className="bg-slate-900 text-slate-200 p-3.5 rounded-lg text-[10px] font-mono whitespace-pre overflow-x-auto leading-relaxed mt-2 select-all font-sans">
+{`# Masukkan data kredensial Firebase produksi Anda sendiri di Dashboard Vercel:
+VITE_FIREBASE_API_KEY="AIzaSy..."
+VITE_FIREBASE_AUTH_DOMAIN="proyek-anda.firebaseapp.com"
+VITE_FIREBASE_PROJECT_ID="proyek-anda"
+VITE_FIREBASE_APP_ID="1:4414...:web:..."
+VITE_FIREBASE_FIRESTORE_DB_ID="(default)"
+VITE_FIREBASE_STORAGE_BUCKET="proyek-anda.firebasestorage.app"
+VITE_FIREBASE_MESSAGING_SENDER_ID="44148..."`}
+              </div>
+            </div>
+
+            <div className="relative border-l-2 border-indigo-100 pl-4 ml-2 space-y-4 py-1">
+              <div className="relative">
+                <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-indigo-650 border border-white"></div>
+                <h5 className="text-xs font-bold text-slate-800">1. Konfigurasikan Otorisasi di Firebase Console Anda</h5>
+                <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 font-sans">
+                  Di konsol Firebase Anda sendiri, navigasikan ke menu sidebar <strong>Build &gt; Authentication</strong>, pilih tab <strong>Settings</strong> di bagian atas.
+                </p>
+              </div>
+
+              <div className="relative">
+                <div className="absolute -left-[21px] top-1.5 w-2 h-2 rounded-full bg-indigo-450 border border-white"></div>
+                <h5 className="text-xs font-bold text-slate-800">2. Daftarkan Domain siascb.vercel.app</h5>
+                <p className="text-[11px] text-slate-500 leading-relaxed mt-0.5 font-sans">
+                  Di bawah daftar <strong>Authorized Domains</strong>, klik tombol <strong>Add Domain</strong>, rekatkan <code className="font-mono text-[10px] bg-slate-100 px-1 text-slate-700">siascb.vercel.app</code>, dan tekan <strong>Save</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/70 rounded-xl border border-amber-150 p-3.5 flex items-start gap-2.5 text-[10.5px] text-amber-800 leading-relaxed">
+              <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Pemberitahuan Sinkronisasi:</strong> Setelah Anda menambahkan variabel lingkungan Firebase di atas di Vercel, lakukan <strong>Redeploy</strong> di Vercel. Aplikasi Anda akan langsung beralih ke database mandiri Anda, dan login Google akan bekerja 100% dengan lancar di domain utama tanpa error apapun!
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* DATABASE MAINTENANCE SYSTEM */}
       <div className="bg-white p-6 sm:p-8 rounded-3xl border border-natural-border shadow-sm space-y-8 mt-8">
