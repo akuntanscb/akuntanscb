@@ -174,8 +174,8 @@ service cloud.firestore {
 
     match /user_roles/{email} {
       allow read: if isSignedIn();
-      allow create, update: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com' && isValidUserRole(incoming());
-      allow delete: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com' && email.lower() != 'keuangan.scb@gmail.com';
+      allow create, update: if isSignedIn() && request.auth.token.email != null && (request.auth.token.email == 'keuangan.scb@gmail.com' || request.auth.token.email.lower() == 'keuangan.scb@gmail.com') && isValidUserRole(incoming());
+      allow delete: if isSignedIn() && request.auth.token.email != null && (request.auth.token.email == 'keuangan.scb@gmail.com' || request.auth.token.email.lower() == 'keuangan.scb@gmail.com') && email != 'keuangan.scb@gmail.com' && email.lower() != 'keuangan.scb@gmail.com';
     }
 
     // --- Activity Logs ---
@@ -186,7 +186,7 @@ service cloud.firestore {
     }
 
     match /activity_logs/{logId} {
-      allow read: if isSignedIn() && request.auth.token.email != null && request.auth.token.email.lower() == 'keuangan.scb@gmail.com';
+      allow read: if isSignedIn() && request.auth.token.email != null && (request.auth.token.email == 'keuangan.scb@gmail.com' || request.auth.token.email.lower() == 'keuangan.scb@gmail.com');
       allow create: if isSignedIn() && isValidActivityLog(incoming());
       allow update, delete: if false;
     }
