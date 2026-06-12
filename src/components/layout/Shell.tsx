@@ -16,11 +16,16 @@ import {
   Sliders,
   Database,
   Trash2,
-  TrendingDown
+  TrendingDown,
+  Globe,
+  AlertTriangle,
+  Check,
+  Copy,
+  ExternalLink
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { auth } from '../../lib/firebase';
+import { auth, firebaseConfig } from '../../lib/firebase';
 import { onAuthStateChanged, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
 import { useSettings } from '../../context/SettingsContext';
 
@@ -126,8 +131,73 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           <p className="text-slate-500 mb-8 max-w-sm mx-auto text-sm">{settings.systemSubName}</p>
 
           {authError && (
-            <div className="mb-4 p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs text-center font-semibold leading-relaxed">
-              {authError}
+            <div className="mb-4">
+              <div className="p-3.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-600 text-xs text-center font-semibold leading-relaxed">
+                {authError}
+              </div>
+              
+              {authError.toLowerCase().includes('unauthorized-domain') && (
+                <div className="mt-4 p-4 bg-slate-50 border border-slate-200 rounded-xl text-left text-xs space-y-3">
+                  <div className="flex items-center gap-2 border-b border-slate-200 pb-2 mb-2 font-bold text-slate-800">
+                    <Sliders className="w-4 h-4 text-indigo-650" />
+                    <span>Panel Diagnostik & Solusi</span>
+                  </div>
+                  
+                  <div className="space-y-1.5 font-mono text-[10.5px]">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Domain Deteksi:</span>
+                      <span className="text-slate-800 font-bold select-all bg-white px-1 border border-slate-200 rounded">{window.location.hostname}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Proyek Terbaca:</span>
+                      <span className="text-slate-800 font-bold bg-white px-1 border border-slate-200 rounded">{firebaseConfig.projectId}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Status Koneksi:</span>
+                      {firebaseConfig.projectId === 'kingly-object-fwh20' ? (
+                        <span className="text-amber-600 font-bold bg-amber-50 px-1 border border-amber-250 rounded">Sandbox AI Studio</span>
+                      ) : (
+                        <span className="text-emerald-600 font-bold bg-emerald-50 px-1 border border-emerald-250 rounded">Produksi (Kustom)</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {firebaseConfig.projectId === 'kingly-object-fwh20' ? (
+                    <div className="space-y-2 text-slate-600 border-t border-slate-150 pt-2 leading-relaxed text-[11px] font-sans">
+                      <p className="text-rose-700 font-medium">
+                        ⚠️ <strong>Penyebab Penting:</strong> Aplikasi Anda di Vercel masih menggunakan Database Sandbox default AI Studio. Domain Vercel Anda tidak diotorisasi di proyek sandbox ini.
+                      </p>
+                      <p>
+                        💡 <strong>Langkah Penyelesaian:</strong>
+                      </p>
+                      <ol className="list-decimal pl-4 space-y-1.5 text-slate-700">
+                        <li>Pastikan Anda sudah menginput semua data environment variables Firebase (seperti API Key, Project ID, dll.) di dashboard Vercel Anda.</li>
+                        <li><strong>Langkah Kunci:</strong> Di Vercel, buka menu <strong>Deployments</strong>, klik tombol opsi (titik tiga) di deployment terakhir Anda, lalu pilih <strong>Redeploy</strong>.</li>
+                        <li>Ini karena Vite memerlukan kompilasi ulang (rebuild) untuk membaca dan memaketkan environment variables baru Anda ke dalam file produksi.</li>
+                      </ol>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 text-slate-600 border-t border-slate-150 pt-2 leading-relaxed text-[11px] font-sans">
+                      <p className="text-emerald-700 font-medium font-semibold">
+                        ✅ <strong>Status:</strong> Aplikasi sudah berhasil terhubung ke Proyek Firebase Kustom Anda sendiri ({firebaseConfig.projectId})!
+                      </p>
+                      <p className="text-amber-700 font-medium">
+                        ⚠️ <strong>Penyebab:</strong> Firebase Console Anda belum memasukkan domain Vercel ini sebagai domain callback yang valid.
+                      </p>
+                      <p>
+                        💡 <strong>Langkah Penyelesaian:</strong>
+                      </p>
+                      <ol className="list-decimal pl-4 space-y-1.5 text-slate-700">
+                        <li>Buka konsol Firebase proyek Anda.</li>
+                        <li>Masuk ke menu sidebar <strong>Build &gt; Authentication</strong>, lalu pilih tab <strong>Settings</strong> di bagian atas.</li>
+                        <li>Cari daftar <strong>Authorized Domains</strong> di bawah halaman, klik tombol <strong>Add Domain</strong>.</li>
+                        <li>Masukkan domain berikut secara tepat (tanpa format http): <code className="font-mono bg-slate-100 px-1 border border-slate-200 rounded">{window.location.hostname}</code></li>
+                        <li>Klik <strong>Save</strong>. Domain akan beres dan Anda sudah bisa masuk dengan Google secara lancar!</li>
+                      </ol>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
