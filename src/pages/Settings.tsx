@@ -32,6 +32,7 @@ import { getJournalEntries } from '../services/journalService';
 import { getInvoices } from '../services/invoiceService';
 import { getDebts } from '../services/debtService';
 import { getDeletedRecords } from '../services/trashService';
+import { getFixedAssets } from '../services/fixedAssetService';
 import { 
   exportCompleteDatabase, 
   restoreDatabaseBackup, 
@@ -61,7 +62,7 @@ export default function Settings() {
   const [uploadError, setUploadError] = useState('');
 
   // Database Management States
-  const [dbStats, setDbStats] = useState({ accounts: 0, journals: 0, invoices: 0, debts: 0, trash: 0 });
+  const [dbStats, setDbStats] = useState({ accounts: 0, journals: 0, invoices: 0, debts: 0, trash: 0, fixedAssets: 0 });
   const [isStatsLoading, setIsStatsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
@@ -80,19 +81,21 @@ export default function Settings() {
   const loadDatabaseStats = async () => {
     setIsStatsLoading(true);
     try {
-      const [accounts, journals, invoices, debts, trash] = await Promise.all([
+      const [accounts, journals, invoices, debts, trash, fixedAssets] = await Promise.all([
         getAccounts().catch(() => []),
         getJournalEntries().catch(() => []),
         getInvoices().catch(() => []),
         getDebts().catch(() => []),
-        getDeletedRecords().catch(() => [])
+        getDeletedRecords().catch(() => []),
+        getFixedAssets().catch(() => [])
       ]);
       setDbStats({
         accounts: accounts.length,
         journals: journals.length,
         invoices: invoices.length,
         debts: debts.length,
-        trash: trash.length
+        trash: trash.length,
+        fixedAssets: fixedAssets.length
       });
     } catch (error) {
       console.error('Gagal memuat statistik database:', error);
@@ -878,8 +881,8 @@ export default function Settings() {
         <div className="space-y-3.5">
           <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest text-left">Struktur & Isi Koleksi Aktif</h4>
           {isStatsLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-              {[1, 2, 3, 4, 5].map((idx) => (
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+              {[1, 2, 3, 4, 5, 6].map((idx) => (
                 <div key={idx} className="bg-slate-50 border border-slate-100 rounded-2xl p-4 flex flex-col items-center justify-center h-20 animate-pulse">
                   <div className="w-4 h-4 bg-slate-200 rounded-full mb-2"></div>
                   <div className="w-12 h-3 bg-slate-200 rounded"></div>
@@ -887,7 +890,7 @@ export default function Settings() {
               ))}
             </div>
           ) : (
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-left">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3 text-left">
               <div className="bg-slate-50/50 hover:bg-slate-50 p-4 border border-slate-150 rounded-2xl transition-all">
                 <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Daftar Akun (COA)</span>
                 <div className="flex items-baseline gap-1">
@@ -914,6 +917,13 @@ export default function Settings() {
                 <div className="flex items-baseline gap-1">
                   <span className="font-mono text-xl font-black text-orange-850">{dbStats.debts}</span>
                   <span className="text-[10px] text-slate-400">pencatatan</span>
+                </div>
+              </div>
+              <div className="bg-slate-50/50 hover:bg-slate-50 p-4 border border-slate-150 rounded-2xl transition-all">
+                <span className="text-[9px] uppercase tracking-wider font-bold text-slate-400 block mb-1">Aset Tetap</span>
+                <div className="flex items-baseline gap-1">
+                  <span className="font-mono text-xl font-black text-indigo-850">{dbStats.fixedAssets}</span>
+                  <span className="text-[10px] text-slate-400">inventaris</span>
                 </div>
               </div>
               <div className="bg-slate-50/50 hover:bg-slate-50 p-4 border border-slate-150 rounded-2xl transition-all">

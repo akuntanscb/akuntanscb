@@ -1,7 +1,35 @@
-import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch } from 'firebase/firestore';
+import { collection, doc, getDocs, setDoc, deleteDoc, writeBatch, Timestamp } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
 import { handleFirestoreError, OperationType } from '../lib/firebaseErrors';
 import { initializeCOA } from './accountService';
+
+/**
+ * Recursively reconstructs Firestore Timestamp objects from serialized {_seconds, _nanoseconds} or {seconds, nanoseconds} representation.
+ */
+function reconstructFirestoreTimestamps(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (typeof val === 'object') {
+    // Check if it matches a Firestore Timestamp signature
+    const hasSeconds = typeof val.seconds === 'number' || typeof val._seconds === 'number';
+    const hasNanos = typeof val.nanoseconds === 'number' || typeof val._nanoseconds === 'number';
+    if (hasSeconds && hasNanos) {
+      const seconds = typeof val.seconds === 'number' ? val.seconds : val._seconds;
+      const nanoseconds = typeof val.nanoseconds === 'number' ? val.nanoseconds : val._nanoseconds;
+      return new Timestamp(seconds, nanoseconds);
+    }
+    
+    if (Array.isArray(val)) {
+      return val.map(reconstructFirestoreTimestamps);
+    }
+    
+    const result: any = {};
+    for (const key of Object.keys(val)) {
+      result[key] = reconstructFirestoreTimestamps(val[key]);
+    }
+    return result;
+  }
+  return val;
+}
 
 const COLLECTIONS_LIST = [
   'accounts',
@@ -9,7 +37,8 @@ const COLLECTIONS_LIST = [
   'invoices',
   'debts_receivables',
   'system_settings',
-  'deleted_records'
+  'deleted_records',
+  'fixed_assets'
 ] as const;
 
 export interface BackupData {
@@ -27,6 +56,7 @@ export interface BackupData {
     debts_receivables?: any[];
     system_settings?: any[];
     deleted_records?: any[];
+    fixed_assets?: any[];
   };
 }
 
@@ -91,14 +121,44 @@ export const exportCompleteDatabase = async (): Promise<BackupData> => {
  */
 export const validateBackupSchema = (parsedJson: any): parsedJson is BackupData => {
   if (!parsedJson || typeof parsedJson !== 'object') return false;
-  if (!parsedJson.backupMetadata || !parsedJson.data) return false;
-  
+
+  // Auto-recovery / wrapping if it's a direct JSON of tables (e.g., exported from another source or manually written)
+  if (!parsedJson.data && (parsedJson.accounts || parsedJson.journal_entries || parsedJson.invoices || parsedJson.debts_receivables || parsedJson.fixed_assets)) {
+    const rawData = { ...parsedJson };
+    parsedJson.data = {
+      accounts: rawData.accounts || [],
+      journal_entries: rawData.journal_entries || [],
+      invoices: rawData.invoices || [],
+      debts_receivables: rawData.debts_receivables || [],
+      system_settings: rawData.system_settings || [],
+      deleted_records: rawData.deleted_records || [],
+      fixed_assets: rawData.fixed_assets || []
+    };
+    parsedJson.backupMetadata = {
+      timestamp: new Date().toISOString(),
+      version: '1.2.0',
+      creatorEmail: auth.currentUser?.email || 'system_imported',
+      systemName: 'SIA Cendekia Baznas',
+      totalRecords: 0
+    };
+  } else if (parsedJson.data && typeof parsedJson.data === 'object' && !parsedJson.backupMetadata) {
+    parsedJson.backupMetadata = {
+      timestamp: new Date().toISOString(),
+      version: '1.2.0',
+      creatorEmail: auth.currentUser?.email || 'system_imported',
+      systemName: 'SIA Cendekia Baznas',
+      totalRecords: 0
+    };
+  }
+
+  // Final validations
   const m = parsedJson.backupMetadata;
+  if (!m || typeof m !== 'object') return false;
   if (typeof m.timestamp !== 'string') return false;
   if (typeof m.version !== 'string') return false;
   
   const d = parsedJson.data;
-  if (typeof d !== 'object') return false;
+  if (!d || typeof d !== 'object') return false;
 
   return true;
 };
@@ -147,7 +207,8 @@ export const restoreDatabaseBackup = async (
         'invoices',
         'debts_receivables',
         'deleted_records',
-        'system_settings'
+        'system_settings',
+        'fixed_assets'
       ]);
     }
 
@@ -161,7 +222,30 @@ export const restoreDatabaseBackup = async (
       for (const chunk of chunks) {
         const batch = writeBatch(db);
         chunk.forEach((record) => {
-          const { id, ...payload } = record;
+          const reconstructedRecord = reconstructFirestoreTimestamps(record);
+          const { id, ...payload } = reconstructedRecord;
+          
+          // Ensure ownership and audit fields conform to security requirements on restore
+          const currentUid = auth.currentUser?.uid || 'system';
+          
+          if (colName === 'journal_entries') {
+            if (!payload.createdBy) payload.createdBy = currentUid;
+            if (!payload.createdAt) payload.createdAt = payload.date || Timestamp.now();
+          } else if (colName === 'invoices') {
+            if (!payload.createdBy) payload.createdBy = currentUid;
+            if (!payload.status) payload.status = 'Draft';
+          } else if (colName === 'debts_receivables') {
+            if (!payload.createdBy) payload.createdBy = currentUid;
+            if (!payload.createdAt) payload.createdAt = Timestamp.now();
+            if (!payload.payments) payload.payments = [];
+          } else if (colName === 'deleted_records') {
+            if (!payload.deletedBy) payload.deletedBy = currentUid;
+          } else if (colName === 'fixed_assets') {
+            if (!payload.createdBy) payload.createdBy = currentUid;
+            if (!payload.createdAt) payload.createdAt = Timestamp.now();
+            if (!payload.depreciationHistory) payload.depreciationHistory = [];
+          }
+
           if (id) {
             const docRef = doc(db, colName, id);
             batch.set(docRef, payload);
@@ -204,7 +288,8 @@ export const resetAllTransactionsToDefault = async (): Promise<void> => {
       'invoices',
       'debts_receivables',
       'deleted_records',
-      'accounts'
+      'accounts',
+      'fixed_assets'
     ]);
 
     // Re-initialize COA defaults
