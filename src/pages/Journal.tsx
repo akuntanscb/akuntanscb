@@ -15,7 +15,12 @@ import {
   FileDown,
   HelpCircle,
   CheckCircle2,
-  Info
+  Info,
+  Zap,
+  Copy,
+  ChevronLeft,
+  ChevronRight,
+  Sparkles
 } from 'lucide-react';
 import { getAccounts } from '../services/accountService';
 import { createJournalEntry, getJournalEntries, updateJournalEntry, deleteJournalEntry } from '../services/journalService';
@@ -93,12 +98,136 @@ export default function Journal() {
   const [deleteError, setDeleteError] = useState('');
   const [isDeletingLoading, setIsDeletingLoading] = useState(false);
 
-  // Filter States
+  // Filter & Pagination States
   const [filterText, setFilterText] = useState('');
   const [filterAccount, setFilterAccount] = useState('');
   const [filterStartDate, setFilterStartDate] = useState('');
   const [filterEndDate, setFilterEndDate] = useState('');
   const [filterSchoolUnit, setFilterSchoolUnit] = useState<'all' | 'SMP' | 'SMA' | 'Umum'>('all');
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [currentPage, setCurrentPage] = useState<number>(1);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterText, filterAccount, filterStartDate, filterEndDate, filterSchoolUnit, pageSize]);
+
+  // Quick Input Helpers
+  const handleGenerateRef = () => {
+    const yearMonth = format(new Date(date || new Date()), 'yyyyMM');
+    const countThisMonth = entries.filter(e => {
+      try {
+        return format(e.date.toDate(), 'yyyyMM') === yearMonth;
+      } catch {
+        return false;
+      }
+    }).length + 1;
+    setReference(`JU-${yearMonth}-${String(countThisMonth).padStart(3, '0')}`);
+  };
+
+  const handleDuplicateLine = (index: number) => {
+    const lineToCopy = lines[index];
+    const newLines = [...lines];
+    newLines.splice(index + 1, 0, { ...lineToCopy });
+    setLines(newLines);
+  };
+
+  const handleAutoBalanceLine = (targetIndex?: number) => {
+    const currentTotalDebit = lines.reduce((sum, l) => sum + (l.debit || 0), 0);
+    const currentTotalCredit = lines.reduce((sum, l) => sum + (l.credit || 0), 0);
+    const diff = Math.round((currentTotalDebit - currentTotalCredit) * 100) / 100;
+
+    if (Math.abs(diff) < 0.01) return;
+
+    const newLines = [...lines];
+    if (targetIndex !== undefined && targetIndex >= 0 && targetIndex < newLines.length) {
+      if (diff > 0) {
+        newLines[targetIndex].credit = Math.round(((newLines[targetIndex].credit || 0) + diff) * 100) / 100;
+        newLines[targetIndex].debit = 0;
+      } else {
+        newLines[targetIndex].debit = Math.round(((newLines[targetIndex].debit || 0) + Math.abs(diff)) * 100) / 100;
+        newLines[targetIndex].credit = 0;
+      }
+    } else {
+      if (diff > 0) {
+        newLines.push({ accountId: '', accountName: '', debit: 0, credit: Math.abs(diff) });
+      } else {
+        newLines.push({ accountId: '', accountName: '', debit: Math.abs(diff), credit: 0 });
+      }
+    }
+    setLines(newLines);
+  };
+
+  const applyTemplate = (templateType: 'spp' | 'operasional' | 'gaji' | 'setorBank') => {
+    const kasAcc = accounts.find(a => a.name.toLowerCase().includes('kas') || a.code.startsWith('1-100'));
+    const bankAcc = accounts.find(a => a.name.toLowerCase().includes('bank') || a.code.startsWith('1-102'));
+    const sppAcc = accounts.find(a => a.name.toLowerCase().includes('spp') || a.name.toLowerCase().includes('bulanan') || a.code.startsWith('4-4'));
+    const bebanAtk = accounts.find(a => a.name.toLowerCase().includes('atk') || a.name.toLowerCase().includes('operasional') || a.name.toLowerCase().includes('beban') || a.code.startsWith('5-5'));
+    const bebanGaji = accounts.find(a => a.name.toLowerCase().includes('gaji') || a.name.toLowerCase().includes('honor') || a.code.startsWith('5-501'));
+
+    if (templateType === 'spp') {
+      setDescription('Penerimaan SPP Bulanan Siswa');
+      setLines([
+        { accountId: kasAcc?.id || '', accountName: kasAcc?.name || '', debit: 0, credit: 0 },
+        { accountId: sppAcc?.id || '', accountName: sppAcc?.name || '', debit: 0, credit: 0 },
+      ]);
+    } else if (templateType === 'operasional') {
+      setDescription('Pengeluaran Operasional / Pembelian ATK');
+      setLines([
+        { accountId: bebanAtk?.id || '', accountName: bebanAtk?.name || '', debit: 0, credit: 0 },
+        { accountId: kasAcc?.id || '', accountName: kasAcc?.name || '', debit: 0, credit: 0 },
+      ]);
+    } else if (templateType === 'gaji') {
+      setDescription('Pembayaran Gaji dan Honorarium Guru / Staf');
+      setLines([
+        { accountId: bebanGaji?.id || '', accountName: bebanGaji?.name || '', debit: 0, credit: 0 },
+        { accountId: bankAcc?.id || kasAcc?.id || '', accountName: bankAcc?.name || kasAcc?.name || '', debit: 0, credit: 0 },
+      ]);
+    } else if (templateType === 'setorBank') {
+      setDescription('Setoran Kas Tunai ke Rekening Bank Sekolah');
+      setLines([
+        { accountId: bankAcc?.id || '', accountName: bankAcc?.name || '', debit: 0, credit: 0 },
+        { accountId: kasAcc?.id || '', accountName: kasAcc?.name || '', debit: 0, credit: 0 },
+      ]);
+    }
+    if (!reference) {
+      handleGenerateRef();
+    }
+  };
+
+  const handleSaveAndNew = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+
+    try {
+      if (!auth.currentUser) throw new Error('Anda harus masuk untuk mencatat jurnal.');
+      if (!description) throw new Error('Keterangan harus diisi.');
+
+      await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
+
+      // Auto increment reference number if present
+      if (reference) {
+        const match = reference.match(/^(.*?)(\d+)$/);
+        if (match) {
+          const prefix = match[1];
+          const num = parseInt(match[2], 10) + 1;
+          const paddedNum = String(num).padStart(match[2].length, '0');
+          setReference(`${prefix}${paddedNum}`);
+        }
+      }
+
+      setDescription('');
+      setLines([
+        { accountId: '', accountName: '', debit: 0, credit: 0 },
+        { accountId: '', accountName: '', debit: 0, credit: 0 },
+      ]);
+      setSelectedDpRef('');
+      setPicName('');
+
+      fetchData();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
 
   // Bulk Delete States
   const [selectedEntryIds, setSelectedEntryIds] = useState<string[]>([]);
@@ -1091,6 +1220,49 @@ export default function Journal() {
             </div>
           )}
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* Quick Templates Bar for Super Fast Entry */}
+            {!isEditingMode && (
+              <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-slate-50 p-4 rounded-2xl border border-emerald-150 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-850 uppercase tracking-wider">
+                    <Zap className="w-4 h-4 text-emerald-600 fill-emerald-500" />
+                    <span>Template Cepat Transaksi Jurnal</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 font-medium">Klik untuk isi otomatis akun & keterangan</span>
+                </div>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate('spp')}
+                    className="px-3 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100/60 text-emerald-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>⚡ Penerimaan SPP</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate('operasional')}
+                    className="px-3 py-1.5 bg-white border border-teal-200 hover:bg-teal-100/60 text-teal-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>⚡ Operasional / ATK</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate('gaji')}
+                    className="px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-100/60 text-indigo-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>⚡ Gaji & Honorarium</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyTemplate('setorBank')}
+                    className="px-3 py-1.5 bg-white border border-sky-200 hover:bg-sky-100/60 text-sky-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <span>⚡ Setor Tunai Bank</span>
+                  </button>
+                </div>
+              </div>
+            )}
+
             <AnimatePresence>
               {hasCreditUangMuka && (
                 <motion.div
@@ -1183,13 +1355,23 @@ export default function Journal() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Nomor Referensi</label>
-                <input 
-                  type="text" 
-                  placeholder="Mis: BM-001"
-                  value={reference}
-                  onChange={(e) => setReference(e.target.value)}
-                  className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
-                />
+                <div className="flex gap-1.5 items-center">
+                  <input 
+                    type="text" 
+                    placeholder="Mis: BM-001"
+                    value={reference}
+                    onChange={(e) => setReference(e.target.value)}
+                    className="w-full px-4 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGenerateRef}
+                    className="p-2 bg-slate-100 hover:bg-emerald-50 text-slate-600 hover:text-emerald-700 rounded-lg border border-slate-250 hover:border-emerald-300 shrink-0 transition-colors text-xs font-semibold flex items-center justify-center cursor-pointer"
+                    title="Generate otomatis nomor referensi"
+                  >
+                    <Sparkles className="w-4 h-4 text-emerald-600" />
+                  </button>
+                </div>
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">Unit Sekolah</label>
@@ -1230,15 +1412,15 @@ export default function Journal() {
 
             <div className="space-y-4">
               <div className="grid grid-cols-12 gap-4 text-xs font-bold text-slate-500 uppercase tracking-wider px-2">
-                <div className="col-span-6">Nama Akun</div>
+                <div className="col-span-5">Nama Akun</div>
                 <div className="col-span-2 text-right">Debit</div>
                 <div className="col-span-2 text-right">Kredit</div>
-                <div className="col-span-2"></div>
+                <div className="col-span-3 text-right">Aksi Baris</div>
               </div>
               
               {lines.map((line, idx) => (
                 <div key={idx} className="grid grid-cols-12 gap-4 items-center">
-                  <div className="col-span-6">
+                  <div className="col-span-5">
                     <select 
                       value={line.accountId}
                       onChange={(e) => handleLineChange(idx, 'accountId', e.target.value)}
@@ -1268,27 +1450,59 @@ export default function Journal() {
                       className="w-full px-4 py-2 border border-slate-200 rounded-lg text-right focus:ring-2 focus:ring-emerald-500 outline-none"
                     />
                   </div>
-                  <div className="col-span-2 text-center">
+                  <div className="col-span-3 flex items-center justify-end gap-1">
+                    <button 
+                      type="button"
+                      onClick={() => handleDuplicateLine(idx)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                      title="Salin Baris Ini"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    {!isBalanced && (
+                      <button 
+                        type="button"
+                        onClick={() => handleAutoBalanceLine(idx)}
+                        className="px-2 py-1.5 text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg transition-colors text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                        title="Isi sisa selisih nominal ke baris ini"
+                      >
+                        <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
+                        <span className="hidden sm:inline">Auto</span>
+                      </button>
+                    )}
                     <button 
                       type="button"
                       onClick={() => handleRemoveLine(idx)}
-                      className="p-2 text-slate-400 hover:text-red-600 transition-colors"
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      title="Hapus Baris"
                     >
-                      <Trash2 className="w-5 h-5" />
+                      <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl">
-              <button 
-                type="button"
-                onClick={handleAddLine}
-                className="text-emerald-600 hover:text-emerald-700 font-semibold flex items-center gap-1"
-              >
-                <Plus className="w-4 h-4" /> Tambah Baris
-              </button>
+            <div className="flex flex-wrap justify-between items-center bg-slate-50 p-4 rounded-xl gap-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <button 
+                  type="button"
+                  onClick={handleAddLine}
+                  className="text-emerald-700 hover:text-emerald-800 font-semibold flex items-center gap-1.5 text-xs bg-white border border-emerald-200 px-3.5 py-2 rounded-lg shadow-2xs hover:bg-emerald-50 transition-colors cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" /> Tambah Baris
+                </button>
+
+                {!isBalanced && (
+                  <button 
+                    type="button"
+                    onClick={() => handleAutoBalanceLine()}
+                    className="text-amber-800 hover:text-amber-900 font-semibold flex items-center gap-1.5 text-xs bg-amber-50 border border-amber-200 px-3.5 py-2 rounded-lg shadow-2xs hover:bg-amber-100 transition-colors cursor-pointer"
+                  >
+                    <Zap className="w-4 h-4 text-amber-600 fill-amber-500" /> Auto-Balance Baris Baru ({formatRupiah(Math.abs(totalDebit - totalCredit))})
+                  </button>
+                )}
+              </div>
               
               <div className="text-right space-y-1">
                 <div className="flex gap-8 text-sm">
@@ -1300,8 +1514,8 @@ export default function Journal() {
                   <span className="font-bold">{formatRupiah(totalCredit)}</span>
                 </div>
                 {!isBalanced && totalDebit + totalCredit > 0 && (
-                  <p className="text-red-500 text-xs flex items-center gap-1 justify-end">
-                    <AlertCircle className="w-3 h-3" /> Jurnal Tidak Seimbang
+                  <p className="text-red-500 text-xs flex items-center gap-1 justify-end font-medium">
+                    <AlertCircle className="w-3.5 h-3.5" /> Selisih: {formatRupiah(Math.abs(totalDebit - totalCredit))} (Tidak Seimbang)
                   </p>
                 )}
               </div>
@@ -1313,13 +1527,24 @@ export default function Journal() {
               </div>
             )}
 
-            <div className="flex justify-end pt-4">
+            <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-slate-100">
+              {!isEditingMode && (
+                <button 
+                  type="button"
+                  onClick={handleSaveAndNew}
+                  disabled={!isBalanced || totalDebit === 0}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-250 disabled:opacity-50 disabled:cursor-not-allowed px-6 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider transition-all shadow-2xs flex items-center gap-2 cursor-pointer"
+                  title="Simpan jurnal ini dan langsung buka form baru untuk transaksi berikutnya"
+                >
+                  <Zap className="w-4 h-4 text-emerald-600 fill-emerald-600" /> Simpan & Entri Baru
+                </button>
+              )}
               <button 
                 type="submit"
                 disabled={!isBalanced || totalDebit === 0}
-                className="bg-natural-primary hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed text-white px-10 py-3 rounded-full font-bold transition-all shadow-lg flex items-center gap-2"
+                className="bg-natural-primary hover:opacity-95 disabled:opacity-50 disabled:cursor-not-allowed text-white px-8 py-2.5 rounded-full font-bold text-xs uppercase tracking-wider transition-all shadow-lg flex items-center gap-2 cursor-pointer"
               >
-                <Save className="w-5 h-5" /> {isEditingMode ? 'Perbarui Jurnal' : 'Simpan Jurnal'}
+                <Save className="w-4 h-4" /> {isEditingMode ? 'Perbarui Jurnal' : 'Simpan Jurnal'}
               </button>
             </div>
           </form>
@@ -1393,6 +1618,25 @@ export default function Journal() {
             />
           </div>
 
+          {/* Page Size Option */}
+          <div className="w-full md:w-36 space-y-1">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Tampilkan</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white font-medium text-slate-700"
+            >
+              <option value={10}>10 Baris</option>
+              <option value={25}>25 Baris</option>
+              <option value={50}>50 Baris</option>
+              <option value={100}>100 Baris</option>
+              <option value={0}>Semua Data</option>
+            </select>
+          </div>
+
           {/* Reset Filters */}
           {(filterText || filterAccount || filterStartDate || filterEndDate || filterSchoolUnit !== 'all') && (
             <button
@@ -1431,139 +1675,183 @@ export default function Journal() {
       </AnimatePresence>
 
       {/* Journal Table */}
-      <div className="bg-white rounded-3xl border border-natural-border shadow-sm overflow-hidden">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-gray-50/50 border-b border-natural-border">
-              {!isViewer && (
-                <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
-                  <input
-                    type="checkbox"
-                    checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
-                    ref={(input) => {
-                      if (input) {
-                        input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
-                      }
-                    }}
-                    onChange={(e) => handleSelectAllEntries(e.target.checked)}
-                    className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
-                    title="Pilih semua baris yang terfilter"
-                  />
-                </th>
-              )}
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
-              {!isViewer && <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {entries.length === 0 ? (
-              <tr>
-                <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
-              </tr>
-            ) : sortedAndFilteredEntries.length === 0 ? (
-              <tr>
-                <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Tidak ada transaksi jurnal yang cocok dengan filter pencarian.</td>
-              </tr>
-            ) : (
-              sortedAndFilteredEntries.map((entry) => (
-                <React.Fragment key={entry.id}>
-                  {entry.lines.map((line, lIdx) => (
-                    <tr key={`${entry.id}-${lIdx}`} className="hover:bg-slate-50/50 transition-colors">
-                      {!isViewer && lIdx === 0 && (
-                        <td className="px-4 py-3 text-center border-r border-slate-100 select-none bg-slate-50/5 w-12" rowSpan={entry.lines.length}>
-                          <div className="flex justify-center items-center h-full">
-                            <input
-                              type="checkbox"
-                              checked={selectedEntryIds.includes(entry.id)}
-                              onChange={() => handleToggleSelectEntry(entry.id)}
-                              className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                            />
-                          </div>
-                        </td>
-                      )}
-                      <td className="px-6 py-3 text-sm text-slate-500">
-                        {lIdx === 0 ? format(entry.date.toDate(), 'dd/MM/yyyy') : ''}
-                      </td>
-                      <td className="px-6 py-3 text-sm text-slate-500">
-                        {lIdx === 0 ? entry.reference : ''}
-                      </td>
-                      <td className="px-6 py-3 text-sm text-slate-700 font-medium pb-4">
-                        {lIdx === 0 ? (
-                          <div>
-                            <div>{entry.description}</div>
-                            <div className="flex flex-wrap gap-1.5 mt-1.5">
-                              {entry.schoolUnit && entry.schoolUnit !== 'Umum' ? (
-                                <span className={cn(
-                                  "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border",
-                                  entry.schoolUnit === 'SMP' 
-                                    ? "bg-sky-50 text-sky-700 border-sky-150" 
-                                    : "bg-indigo-50 text-indigo-700 border-indigo-150"
-                                )}>
-                                  {entry.schoolUnit}
-                                </span>
-                              ) : (
-                                <span className="text-[9px] bg-slate-50 text-slate-600 border border-slate-150 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
-                                  Umum
-                                </span>
-                              )}
-                              {(entry as any).picName && (
-                                <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider inline-flex items-center gap-1">
-                                  PIC: {(entry as any).picName}
+      {(() => {
+        const totalItems = sortedAndFilteredEntries.length;
+        const totalPages = pageSize === 0 ? 1 : Math.max(1, Math.ceil(totalItems / pageSize));
+        const safeCurrentPage = Math.min(currentPage, totalPages);
+        const displayedEntries = pageSize === 0 
+          ? sortedAndFilteredEntries 
+          : sortedAndFilteredEntries.slice((safeCurrentPage - 1) * pageSize, safeCurrentPage * pageSize);
+        const startIndex = pageSize === 0 ? (totalItems > 0 ? 1 : 0) : Math.min((safeCurrentPage - 1) * pageSize + 1, totalItems);
+        const endIndex = pageSize === 0 ? totalItems : Math.min(safeCurrentPage * pageSize, totalItems);
+
+        return (
+          <div className="bg-white rounded-3xl border border-natural-border shadow-sm overflow-hidden">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-gray-50/50 border-b border-natural-border">
+                  {!isViewer && (
+                    <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
+                      <input
+                        type="checkbox"
+                        checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
+                        ref={(input) => {
+                          if (input) {
+                            input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
+                          }
+                        }}
+                        onChange={(e) => handleSelectAllEntries(e.target.checked)}
+                        className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
+                        title="Pilih semua baris yang terfilter"
+                      />
+                    </th>
+                  )}
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
+                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
+                  {!isViewer && <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {entries.length === 0 ? (
+                  <tr>
+                    <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
+                  </tr>
+                ) : sortedAndFilteredEntries.length === 0 ? (
+                  <tr>
+                    <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Tidak ada transaksi jurnal yang cocok dengan filter pencarian.</td>
+                  </tr>
+                ) : (
+                  displayedEntries.map((entry) => (
+                    <React.Fragment key={entry.id}>
+                      {entry.lines.map((line, lIdx) => (
+                        <tr key={`${entry.id}-${lIdx}`} className="hover:bg-slate-50/50 transition-colors">
+                          {!isViewer && lIdx === 0 && (
+                            <td className="px-4 py-3 text-center border-r border-slate-100 select-none bg-slate-50/5 w-12" rowSpan={entry.lines.length}>
+                              <div className="flex justify-center items-center h-full">
+                                <input
+                                  type="checkbox"
+                                  checked={selectedEntryIds.includes(entry.id)}
+                                  onChange={() => handleToggleSelectEntry(entry.id)}
+                                  className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                                />
+                              </div>
+                            </td>
+                          )}
+                          <td className="px-6 py-3 text-sm text-slate-500">
+                            {lIdx === 0 ? format(entry.date.toDate(), 'dd/MM/yyyy') : ''}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-slate-500">
+                            {lIdx === 0 ? entry.reference : ''}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-slate-700 font-medium pb-4">
+                            {lIdx === 0 ? (
+                              <div>
+                                <div>{entry.description}</div>
+                                <div className="flex flex-wrap gap-1.5 mt-1.5">
+                                  {entry.schoolUnit && entry.schoolUnit !== 'Umum' ? (
+                                    <span className={cn(
+                                      "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border",
+                                      entry.schoolUnit === 'SMP' 
+                                        ? "bg-sky-50 text-sky-700 border-sky-150" 
+                                        : "bg-indigo-50 text-indigo-700 border-indigo-150"
+                                    )}>
+                                      {entry.schoolUnit}
+                                    </span>
+                                  ) : (
+                                    <span className="text-[9px] bg-slate-50 text-slate-600 border border-slate-150 px-1.5 py-0.5 rounded font-bold uppercase tracking-wider">
+                                      Umum
+                                    </span>
+                                  )}
+                                  {(entry as any).picName && (
+                                    <div className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-1.5 py-0.5 rounded font-semibold uppercase tracking-wider inline-flex items-center gap-1">
+                                      PIC: {(entry as any).picName}
+                                    </div>
+                                  )}
                                 </div>
-                              )}
-                            </div>
-                          </div>
-                        ) : ''}
-                      </td>
-                      <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
-                        <span className="inline-flex items-center gap-2">
-                          <span className="font-mono text-xs text-natural-primary/70 bg-natural-primary/5 px-1.5 py-0.5 rounded border border-natural-border">
-                            {accounts.find(a => a.id === line.accountId)?.code || ''}
-                          </span>
-                          <span className="font-medium text-slate-750">
-                            {accounts.find(a => a.id === line.accountId)?.name || line.accountName}
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-6 py-3 text-sm text-right font-mono text-emerald-600">
-                        {line.debit > 0 ? formatRupiah(line.debit) : ''}
-                      </td>
-                      <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
-                        {line.credit > 0 ? formatRupiah(line.credit) : ''}
-                      </td>
-                      {!isViewer && lIdx === 0 && (
-                        <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
-                          <div className="flex items-center justify-center gap-1.5">
-                            <button
-                              onClick={() => handleEditClick(entry)}
-                              className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
-                              title="Edit Jurnal"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteClick(entry)}
-                              className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none"
-                              title="Hapus Jurnal"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </React.Fragment>
-              ))
+                              </div>
+                            ) : ''}
+                          </td>
+                          <td className={cn("px-6 py-3 text-sm text-slate-600", line.credit > 0 && "pl-12")}>
+                            <span className="inline-flex items-center gap-2">
+                              <span className="font-mono text-xs text-natural-primary/70 bg-natural-primary/5 px-1.5 py-0.5 rounded border border-natural-border">
+                                {accounts.find(a => a.id === line.accountId)?.code || ''}
+                              </span>
+                              <span className="font-medium text-slate-750">
+                                {accounts.find(a => a.id === line.accountId)?.name || line.accountName}
+                              </span>
+                            </span>
+                          </td>
+                          <td className="px-6 py-3 text-sm text-right font-mono text-emerald-600">
+                            {line.debit > 0 ? formatRupiah(line.debit) : ''}
+                          </td>
+                          <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
+                            {line.credit > 0 ? formatRupiah(line.credit) : ''}
+                          </td>
+                          {!isViewer && lIdx === 0 && (
+                            <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  onClick={() => handleEditClick(entry)}
+                                  className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none cursor-pointer"
+                                  title="Edit Jurnal"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteClick(entry)}
+                                  className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex animate-none cursor-pointer"
+                                  title="Hapus Jurnal"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))
+                )}
+              </tbody>
+            </table>
+
+            {/* Pagination Controls Footer */}
+            {sortedAndFilteredEntries.length > 0 && (
+              <div className="px-6 py-4 bg-slate-50/60 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="text-xs text-slate-500 font-medium">
+                  Menampilkan <span className="font-bold text-slate-700">{startIndex}</span> - <span className="font-bold text-slate-700">{endIndex}</span> dari <span className="font-bold text-slate-700">{totalItems}</span> data transaksi
+                </div>
+
+                {pageSize > 0 && totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                      disabled={safeCurrentPage === 1}
+                      className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" /> Prev
+                    </button>
+                    <span className="text-xs text-slate-600 font-semibold px-2">
+                      Halaman {safeCurrentPage} dari {totalPages}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                      disabled={safeCurrentPage >= totalPages}
+                      className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-semibold hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      Next <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
-          </tbody>
-        </table>
-      </div>
+          </div>
+        );
+      })()}
 
       {/* Delete Confirmation Modal overlay */}
       <AnimatePresence>
