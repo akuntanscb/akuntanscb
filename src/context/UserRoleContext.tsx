@@ -75,7 +75,8 @@ export const UserRoleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const hasPermission = (permissionKey: keyof UserRole['permissions']): boolean => {
     if (!userRole) return false;
     if (userRole.role === 'admin') return true;
-    return !!userRole.permissions[permissionKey];
+    // Anyone other than admin is restricted from seeing or performing operations on other menus/pages
+    return false;
   };
 
   const isUnitAllowed = (unit?: 'SMP' | 'SMA' | 'Umum'): boolean => {

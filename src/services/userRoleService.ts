@@ -88,36 +88,16 @@ export const getUserRoleByEmail = async (email: string): Promise<UserRole> => {
     };
   }
 
-  const path = `user_roles/${lowercaseVal}`;
-  try {
-    const docRef = doc(db, 'user_roles', lowercaseVal);
-    const snap = await getDoc(docRef);
-    if (snap.exists()) {
-      return snap.data() as UserRole;
-    }
-    
-    // Default Role for unconfigured accounts is 'viewer' with no read/write of logs/COA edits etc
-    return {
-      email: lowercaseVal,
-      name: 'Pengguna Terbatas',
-      role: 'viewer',
-      permissions: DEFAULT_VIEWER_PERMISSIONS,
-      restrictedUnits: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  } catch (error) {
-    console.warn('Error fetching role, returning viewer default:', error);
-    return {
-      email: lowercaseVal,
-      name: 'Pengguna Terbatas',
-      role: 'viewer',
-      permissions: DEFAULT_VIEWER_PERMISSIONS,
-      restrictedUnits: [],
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  }
+  // Any other email: strictly force role to 'viewer' with view-only permissions
+  return {
+    email: lowercaseVal,
+    name: 'Pengguna Terbatas (Viewer)',
+    role: 'viewer',
+    permissions: DEFAULT_VIEWER_PERMISSIONS,
+    restrictedUnits: [],
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
 };
 
 export const saveUserRole = async (email: string, userRoleData: Omit<UserRole, 'createdAt' | 'updatedAt'>) => {

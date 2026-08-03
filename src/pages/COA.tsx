@@ -42,7 +42,8 @@ interface ParsedAccount {
 }
 
 export default function COA() {
-  const { hasPermission } = useUserRole();
+  const { hasPermission, userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
 
   if (!hasPermission('canCOA')) {
     return (
@@ -676,16 +677,18 @@ export default function COA() {
             )}
           >
             <FileSpreadsheet className="w-4 h-4 shrink-0" />
-            Ekspor & Impor
+            {isViewer ? 'Ekspor Bagan Akun' : 'Ekspor & Impor'}
           </button>
           
-          <button 
-            onClick={handleOpenAdd}
-            className="px-6 py-2.5 bg-natural-primary text-white hover:opacity-90 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none"
-          >
-            <Plus className="w-4 h-4" /> 
-            Tambah Akun
-          </button>
+          {!isViewer && (
+            <button 
+              onClick={handleOpenAdd}
+              className="px-6 py-2.5 bg-natural-primary text-white hover:opacity-90 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none"
+            >
+              <Plus className="w-4 h-4" /> 
+              Tambah Akun
+            </button>
+          )}
         </div>
       </div>
 
@@ -698,7 +701,10 @@ export default function COA() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className={cn(
+              "bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid gap-8",
+              isViewer ? "grid-cols-1 max-w-2xl mx-auto" : "grid-cols-1 lg:grid-cols-2"
+            )}>
               {/* Export Panel */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -763,66 +769,68 @@ export default function COA() {
               </div>
 
               {/* Import Panel */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                      <FileUp className="w-4 h-4" />
+              {!isViewer && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                        <FileUp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-serif italic font-bold text-slate-855 text-base">Impor Bagan Akun</h3>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi bagan akun instan</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-serif italic font-bold text-slate-855 text-base">Impor Bagan Akun</h3>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi bagan akun instan</p>
-                    </div>
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="text-[10px] text-indigo-750 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
+                      title="Unduh format tabel dalam Excel/CSV"
+                    >
+                      <Download className="w-3 h-3" /> Unduh Template CSV
+                    </button>
                   </div>
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="text-[10px] text-indigo-750 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
-                    title="Unduh format tabel dalam Excel/CSV"
+
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
+                      dragOver 
+                        ? "border-indigo-505 bg-indigo-50/50" 
+                        : "border-slate-250 bg-white hover:border-slate-350"
+                    )}
                   >
-                    <Download className="w-3 h-3" /> Unduh Template CSV
-                  </button>
-                </div>
+                    <input
+                      type="file"
+                      accept=".csv,.json"
+                      id="import-coa-file-selector"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      title=""
+                    />
+                    <Upload className="w-8 h-8 text-slate-400 shrink-0" />
+                    <div className="space-y-0.5 select-none">
+                      <p className="text-xs font-semibold text-slate-700">Tarik & Lepaskan File (.csv atau .json)</p>
+                      <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
+                    </div>
+                  </div>
 
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={cn(
-                    "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
-                    dragOver 
-                      ? "border-indigo-505 bg-indigo-50/50" 
-                      : "border-slate-250 bg-white hover:border-slate-350"
+                  {importSuccessMsg && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{importSuccessMsg}</span>
+                    </div>
                   )}
-                >
-                  <input
-                    type="file"
-                    accept=".csv,.json"
-                    id="import-coa-file-selector"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title=""
-                  />
-                  <Upload className="w-8 h-8 text-slate-400 shrink-0" />
-                  <div className="space-y-0.5 select-none">
-                    <p className="text-xs font-semibold text-slate-700">Tarik & Lepaskan File (.csv atau .json)</p>
-                    <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
-                  </div>
+
+                  {importErrorMsg && (
+                    <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="flex-1">{importErrorMsg}</span>
+                    </div>
+                  )}
                 </div>
-
-                {importSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{importSuccessMsg}</span>
-                  </div>
-                )}
-
-                {importErrorMsg && (
-                  <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="flex-1">{importErrorMsg}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Parsing Review Panel / Importer Preview Table */}
@@ -965,7 +973,7 @@ export default function COA() {
                 <th className="px-6 py-5">Kategori</th>
                 <th className="px-6 py-5">Sub-Kategori</th>
                 <th className="px-6 py-5 text-right">Saldo Awal</th>
-                <th className="px-6 py-5 text-center">Aksi</th>
+                {!isViewer && <th className="px-6 py-5 text-center">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -992,24 +1000,26 @@ export default function COA() {
                       </div>
                     ) : null}
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className="flex items-center justify-center gap-1.5">
-                      <button
-                        onClick={() => handleOpenEdit(acc)}
-                        className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex"
-                        title="Edit Akun"
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTrigger(acc.id, `${acc.code} - ${acc.name}`)}
-                        className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex"
-                        title="Hapus Akun"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </td>
+                  {!isViewer && (
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          onClick={() => handleOpenEdit(acc)}
+                          className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex"
+                          title="Edit Akun"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTrigger(acc.id, `${acc.code} - ${acc.name}`)}
+                          className="p-1.5 hover:bg-rose-50 rounded-lg text-rose-500 hover:text-rose-600 hover:scale-105 transition-all shadow-sm border border-neutral-100 bg-white inline-flex"
+                          title="Hapus Akun"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
               {filteredAccounts.length === 0 && (

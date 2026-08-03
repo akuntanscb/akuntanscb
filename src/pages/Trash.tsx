@@ -16,14 +16,28 @@ import {
   Calendar,
   User,
   Activity,
-  ArrowRight
+  ArrowRight,
+  Shield
 } from 'lucide-react';
 import { getDeletedRecords, restoreDeletedRecord, wipeTrashRecord, emptyAllRecycleBin, DeletedRecord } from '../services/trashService';
 import { useSettings } from '../context/SettingsContext';
+import { useUserRole } from '../context/UserRoleContext';
 import { formatRupiah, cn } from '../lib/utils';
 import { format } from 'date-fns';
 
 export default function Trash() {
+  const { hasPermission } = useUserRole();
+
+  if (!hasPermission('canTrash')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canTrash) untuk mengakses Tempat Sampah.</p>
+      </div>
+    );
+  }
+
   const { settings } = useSettings();
   const [records, setRecords] = useState<DeletedRecord[]>([]);
   const [loading, setLoading] = useState(true);

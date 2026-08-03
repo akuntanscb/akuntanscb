@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useSettings } from '../context/SettingsContext';
+import { useUserRole } from '../context/UserRoleContext';
 import { motion } from 'motion/react';
 import { 
   Building2, 
@@ -41,6 +42,18 @@ import {
 } from '../services/dbBackupService';
 
 export default function Settings() {
+  const { hasPermission } = useUserRole();
+
+  if (!hasPermission('canSettings')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canSettings) untuk mengakses Pengaturan Sistem.</p>
+      </div>
+    );
+  }
+
   const { settings, t, updateSettings, isLoading } = useSettings();
   
   // Local Form States

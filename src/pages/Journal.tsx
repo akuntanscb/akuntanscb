@@ -43,7 +43,8 @@ interface ParsedEntry {
 }
 
 export default function Journal() {
-  const { hasPermission, isUnitAllowed } = useUserRole();
+  const { hasPermission, isUnitAllowed, userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
 
   if (!hasPermission('canJournal')) {
     return (
@@ -812,26 +813,28 @@ export default function Journal() {
             )}
           >
             <FileSpreadsheet className="w-4 h-4 shrink-0" />
-            Ekspor & Impor
+            {isViewer ? 'Ekspor Jurnal' : 'Ekspor & Impor'}
           </button>
           
-          <button 
-            onClick={() => {
-              if (showForm) {
-                handleCancelForm();
-              } else {
-                setShowForm(true);
-                setShowImportExport(false);
-              }
-            }}
-            className={cn(
-              "px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none",
-              showForm ? "bg-rose-50 text-rose-600 border border-rose-200" : "bg-natural-primary text-white hover:opacity-90"
-            )}
-          >
-            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-            {showForm ? 'Batal' : 'Entri Jurnal'}
-          </button>
+          {!isViewer && (
+            <button 
+              onClick={() => {
+                if (showForm) {
+                  handleCancelForm();
+                } else {
+                  setShowForm(true);
+                  setShowImportExport(false);
+                }
+              }}
+              className={cn(
+                "px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none",
+                showForm ? "bg-rose-50 text-rose-600 border border-rose-200" : "bg-natural-primary text-white hover:opacity-90"
+              )}
+            >
+              {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {showForm ? 'Batal' : 'Entri Jurnal'}
+            </button>
+          )}
         </div>
       </div>
 
@@ -844,7 +847,10 @@ export default function Journal() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className={cn(
+              "bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid gap-8",
+              isViewer ? "grid-cols-1 max-w-2xl mx-auto" : "grid-cols-1 lg:grid-cols-2"
+            )}>
               {/* Export Panel */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -909,66 +915,68 @@ export default function Journal() {
               </div>
 
               {/* Import Panel */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                      <FileUp className="w-4 h-4" />
+              {!isViewer && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                        <FileUp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-serif italic font-bold text-slate-850 text-base">Impor Data Jurnal</h3>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah spreadsheet Anda untuk membuat laporan otomatis instant</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-serif italic font-bold text-slate-850 text-base">Impor Data Jurnal</h3>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah spreadsheet Anda untuk membuat laporan otomatis instant</p>
-                    </div>
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="text-[10px] text-indigo-700 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
+                      title="Unduh format tabel dalam Excel/CSV"
+                    >
+                      <Download className="w-3 h-3" /> Unduh Template CSV
+                    </button>
                   </div>
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="text-[10px] text-indigo-700 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
-                    title="Unduh format tabel dalam Excel/CSV"
+
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
+                      dragOver 
+                        ? "border-indigo-505 bg-indigo-50/50" 
+                        : "border-slate-205 bg-white hover:border-slate-350"
+                    )}
                   >
-                    <Download className="w-3 h-3" /> Unduh Template CSV
-                  </button>
-                </div>
+                    <input
+                      type="file"
+                      accept=".csv,.json"
+                      id="import-file-selector"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      title=""
+                    />
+                    <Upload className="w-8 h-8 text-slate-400 shrink-0" />
+                    <div className="space-y-0.5 select-none">
+                      <p className="text-xs font-semibold text-slate-700">Tarik & Lepaskan File (.csv atau .json)</p>
+                      <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
+                    </div>
+                  </div>
 
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={cn(
-                    "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
-                    dragOver 
-                      ? "border-indigo-505 bg-indigo-50/50" 
-                      : "border-slate-205 bg-white hover:border-slate-350"
+                  {importSuccessMsg && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{importSuccessMsg}</span>
+                    </div>
                   )}
-                >
-                  <input
-                    type="file"
-                    accept=".csv,.json"
-                    id="import-file-selector"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title=""
-                  />
-                  <Upload className="w-8 h-8 text-slate-400 shrink-0" />
-                  <div className="space-y-0.5 select-none">
-                    <p className="text-xs font-semibold text-slate-700">Tarik & Lepaskan File (.csv atau .json)</p>
-                    <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
-                  </div>
+
+                  {importErrorMsg && (
+                    <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="flex-1">{importErrorMsg}</span>
+                    </div>
+                  )}
                 </div>
-
-                {importSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{importSuccessMsg}</span>
-                  </div>
-                )}
-
-                {importErrorMsg && (
-                  <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="flex-1">{importErrorMsg}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Parsing Review Panel / Importer Preview Table */}
@@ -1399,7 +1407,7 @@ export default function Journal() {
 
       {/* Bulk Action Bar of Selected Entries */}
       <AnimatePresence>
-        {selectedEntryIds.length > 0 && (
+        {!isViewer && selectedEntryIds.length > 0 && (
           <motion.div
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
@@ -1427,44 +1435,46 @@ export default function Journal() {
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="bg-gray-50/50 border-b border-natural-border">
-              <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
-                <input
-                  type="checkbox"
-                  checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
-                  ref={(input) => {
-                    if (input) {
-                      input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
-                    }
-                  }}
-                  onChange={(e) => handleSelectAllEntries(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
-                  title="Pilih semua baris yang terfilter"
-                />
-              </th>
+              {!isViewer && (
+                <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
+                  <input
+                    type="checkbox"
+                    checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
+                    ref={(input) => {
+                      if (input) {
+                        input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
+                      }
+                    }}
+                    onChange={(e) => handleSelectAllEntries(e.target.checked)}
+                    className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
+                    title="Pilih semua baris yang terfilter"
+                  />
+                </th>
+              )}
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
               <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>
+              {!isViewer && <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {entries.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
+                <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
               </tr>
             ) : sortedAndFilteredEntries.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-6 py-12 text-center text-slate-400">Tidak ada transaksi jurnal yang cocok dengan filter pencarian.</td>
+                <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Tidak ada transaksi jurnal yang cocok dengan filter pencarian.</td>
               </tr>
             ) : (
               sortedAndFilteredEntries.map((entry) => (
                 <React.Fragment key={entry.id}>
                   {entry.lines.map((line, lIdx) => (
                     <tr key={`${entry.id}-${lIdx}`} className="hover:bg-slate-50/50 transition-colors">
-                      {lIdx === 0 && (
+                      {!isViewer && lIdx === 0 && (
                         <td className="px-4 py-3 text-center border-r border-slate-100 select-none bg-slate-50/5 w-12" rowSpan={entry.lines.length}>
                           <div className="flex justify-center items-center h-full">
                             <input
@@ -1526,7 +1536,7 @@ export default function Journal() {
                       <td className="px-6 py-3 text-sm text-right font-mono text-rose-600">
                         {line.credit > 0 ? formatRupiah(line.credit) : ''}
                       </td>
-                      {lIdx === 0 && (
+                      {!isViewer && lIdx === 0 && (
                         <td className="px-6 py-3 text-center border-l border-slate-100" rowSpan={entry.lines.length}>
                           <div className="flex items-center justify-center gap-1.5">
                             <button

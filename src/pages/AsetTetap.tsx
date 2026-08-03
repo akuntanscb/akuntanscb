@@ -24,9 +24,11 @@ import {
   FileJson,
   Upload,
   Download,
-  Save
+  Save,
+  Shield
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { useUserRole } from '../context/UserRoleContext';
 import { getFixedAssets, createFixedAsset, updateFixedAsset, deleteFixedAsset, postAssetDepreciation } from '../services/fixedAssetService';
 import { getAccounts } from '../services/accountService';
 import { FixedAsset, DepreciationLog, Account } from '../types';
@@ -53,6 +55,19 @@ interface ParsedFixedAsset {
 }
 
 export default function AsetTetap() {
+  const { hasPermission, isUnitAllowed, userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
+
+  if (!hasPermission('canFixedAssets')) {
+    return (
+      <div className="bg-white rounded-2xl border border-rose-100 p-8 text-center max-w-md mx-auto my-12 shadow-sm font-sans">
+        <Shield className="w-12 h-12 text-rose-500 mx-auto mb-4 animate-bounce" />
+        <h3 className="text-lg font-bold text-slate-900 mb-2">Akses Ditolak</h3>
+        <p className="text-sm text-slate-500">Anda tidak memiliki hak istimewa (canFixedAssets) untuk melihat atau mengelola Aset Tetap.</p>
+      </div>
+    );
+  }
+
   const [assets, setAssets] = useState<FixedAsset[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -1116,7 +1131,10 @@ export default function AsetTetap() {
             exit={{ opacity: 0, height: 0 }}
             className="overflow-hidden mb-6 animate-none"
           >
-            <div className="bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className={cn(
+              "bg-gradient-to-br from-slate-50 to-white p-6 rounded-3xl border border-natural-border shadow-md grid gap-8",
+              isViewer ? "grid-cols-1 max-w-2xl mx-auto" : "grid-cols-1 lg:grid-cols-2"
+            )}>
               {/* Export Panel */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2">
@@ -1179,66 +1197,68 @@ export default function AsetTetap() {
               </div>
 
               {/* Import Panel */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
-                      <FileUp className="w-4 h-4" />
+              {!isViewer && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600">
+                        <FileUp className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h3 className="font-serif italic font-bold text-slate-800 text-base">Impor Inventaris Aset Tetap</h3>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi inventaris instan</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-serif italic font-bold text-slate-800 text-base">Impor Inventaris Aset Tetap</h3>
-                      <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah dokumen untuk sinkronisasi inventaris instan</p>
-                    </div>
+                    <button
+                      onClick={handleDownloadTemplate}
+                      className="text-[10px] text-indigo-700 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
+                      title="Unduh format tabel dalam Excel/CSV"
+                    >
+                      <Download className="w-3 h-3" /> Unduh Template CSV
+                    </button>
                   </div>
-                  <button
-                    onClick={handleDownloadTemplate}
-                    className="text-[10px] text-indigo-700 hover:underline uppercase tracking-widest font-bold font-mono cursor-pointer flex items-center gap-1 shrink-0"
-                    title="Unduh format tabel dalam Excel/CSV"
+
+                  <div
+                    onDragOver={handleDragOver}
+                    onDragLeave={handleDragLeave}
+                    onDrop={handleDrop}
+                    className={cn(
+                      "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
+                      dragOver 
+                        ? "border-indigo-505 bg-indigo-50/50" 
+                        : "border-slate-200 bg-white hover:border-slate-300"
+                    )}
                   >
-                    <Download className="w-3 h-3" /> Unduh Template CSV
-                  </button>
-                </div>
+                    <input
+                      type="file"
+                      accept=".csv,.json"
+                      id="import-assets-file-selector"
+                      onChange={handleFileChange}
+                      className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                      title=""
+                    />
+                    <Upload className="w-8 h-8 text-slate-400 shrink-0" />
+                    <div className="space-y-0.5 select-none font-sans">
+                      <p className="text-xs font-semibold text-slate-700 font-sans">Tarik & Lepaskan File (.csv atau .json)</p>
+                      <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
+                    </div>
+                  </div>
 
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={cn(
-                    "border-2 border-dashed rounded-2xl p-6 text-center transition-all relative flex flex-col items-center justify-center gap-2 cursor-pointer min-h-[140px]",
-                    dragOver 
-                      ? "border-indigo-505 bg-indigo-50/50" 
-                      : "border-slate-200 bg-white hover:border-slate-300"
+                  {importSuccessMsg && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2 font-sans">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>{importSuccessMsg}</span>
+                    </div>
                   )}
-                >
-                  <input
-                    type="file"
-                    accept=".csv,.json"
-                    id="import-assets-file-selector"
-                    onChange={handleFileChange}
-                    className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
-                    title=""
-                  />
-                  <Upload className="w-8 h-8 text-slate-400 shrink-0" />
-                  <div className="space-y-0.5 select-none font-sans">
-                    <p className="text-xs font-semibold text-slate-700 font-sans">Tarik & Lepaskan File (.csv atau .json)</p>
-                    <p className="text-[10px] text-slate-400 leading-none">atau klik area ini untuk memindai dokumen Anda</p>
-                  </div>
+
+                  {importErrorMsg && (
+                    <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2 font-sans">
+                      <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                      <span className="flex-1">{importErrorMsg}</span>
+                    </div>
+                  )}
                 </div>
-
-                {importSuccessMsg && (
-                  <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-xs rounded-xl flex items-center gap-2 font-sans">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                    <span>{importSuccessMsg}</span>
-                  </div>
-                )}
-
-                {importErrorMsg && (
-                  <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs rounded-xl flex items-center gap-2 font-sans">
-                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-                    <span className="flex-1">{importErrorMsg}</span>
-                  </div>
-                )}
-              </div>
+              )}
             </div>
 
             {/* Parsing Review Panel / Importer Preview Table */}
@@ -1409,16 +1429,18 @@ export default function AsetTetap() {
               )}
             >
               <FileUp className="w-4 h-4" />
-              <span>Ekspor / Impor</span>
+              <span>{isViewer ? 'Ekspor Aset' : 'Ekspor / Impor'}</span>
             </button>
 
-            <button
-              onClick={handleOpenAdd}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 bg-natural-primary rounded-xl text-xs font-bold text-white shadow-md cursor-pointer hover:brightness-110 active:scale-[0.98] transition-all shrink-0"
-            >
-              <Plus className="w-4 h-4 text-white/90" />
-              <span>Tambah Aset Tetap</span>
-            </button>
+            {!isViewer && (
+              <button
+                onClick={handleOpenAdd}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 bg-natural-primary rounded-xl text-xs font-bold text-white shadow-md cursor-pointer hover:brightness-110 active:scale-[0.98] transition-all shrink-0"
+              >
+                <Plus className="w-4 h-4 text-white/90" />
+                <span>Tambah Aset Tetap</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1531,7 +1553,7 @@ export default function AsetTetap() {
                       {/* Actions */}
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-center gap-1.5">
-                          {asset.status === 'Aktif' && (
+                          {asset.status === 'Aktif' && !isViewer && (
                             <button
                               onClick={() => handleOpenDeprPosting(asset)}
                               title="Posting Jurnal Depresiasi Bulan Ini"
@@ -1550,7 +1572,7 @@ export default function AsetTetap() {
                             <FileText className="w-4 h-4" />
                           </button>
 
-                          {asset.status === 'Aktif' && (
+                          {asset.status === 'Aktif' && !isViewer && (
                             <>
                               <button
                                 onClick={() => handleOpenDispose(asset)}
@@ -1570,13 +1592,15 @@ export default function AsetTetap() {
                             </>
                           )}
 
-                          <button
-                            onClick={() => handleDeleteAsset(asset.id)}
-                            title="Hapus Aset"
-                            className="p-1.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {!isViewer && (
+                            <button
+                              onClick={() => handleDeleteAsset(asset.id)}
+                              title="Hapus Aset"
+                              className="p-1.5 bg-rose-50 border border-rose-100 rounded-xl text-rose-400 hover:text-rose-600 hover:bg-rose-100 transition-colors cursor-pointer"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

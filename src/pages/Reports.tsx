@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Printer, Download, Filter, FileBarChart, Settings2, Sliders, ChevronUp, ChevronDown, Eye, EyeOff, X, Save, CheckCircle2, AlertCircle, Info } from 'lucide-react';
+import { Printer, Download, Filter, FileBarChart, Settings2, Sliders, ChevronUp, ChevronDown, Eye, EyeOff, X, Save, CheckCircle2, AlertCircle, Info, Shield } from 'lucide-react';
 import { getFinancialReports } from '../services/reportService';
 import { getAccounts, updateAccount } from '../services/accountService';
 import { Account, AccountCategory } from '../types';
 import { formatRupiah, cn } from '../lib/utils';
+import { useUserRole } from '../context/UserRoleContext';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
@@ -135,10 +136,18 @@ function sanitizeColorString(text: string): string {
 }
 
 export default function Reports() {
+  const { userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'neraca' | 'aktivitas' | 'arusKas' | 'calk'>('neraca');
   const [selectedUnit, setSelectedUnit] = useState<'all' | 'SMP' | 'SMA' | 'Umum'>('all');
+
+  // Date filter states
+  const [filterType, setFilterType] = useState<'all' | 'this_month' | 'this_year' | 'custom'>('all');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
 
   // Layout Configuration states
   const [isLayoutEditorOpen, setIsLayoutEditorOpen] = useState(false);
@@ -154,6 +163,61 @@ export default function Reports() {
   const [calkCatatanTambahan, setCalkCatatanTambahan] = useState('');
   const [calkSuccessMsg, setCalkSuccessMsg] = useState('');
 
+  const getPeriodDates = (type: 'all' | 'this_month' | 'this_year' | 'custom') => {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth(); // 0-indexed
+    
+    switch (type) {
+      case 'this_month': {
+        const start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+        const lastDay = new Date(y, m + 1, 0).getDate();
+        const end = `${y}-${String(m + 1).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+        return { start, end };
+      }
+      case 'this_year': {
+        const start = `${y}-01-01`;
+        const end = `${y}-12-31`;
+        return { start, end };
+      }
+      case 'all':
+      default:
+        return { start: '', end: '' };
+    }
+  };
+
+  const getPeriodLabel = () => {
+    if (filterType === 'all') {
+      return `Semua Periode (s.d. ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })})`;
+    }
+    
+    const formatDateIndonesia = (dateStr: string) => {
+      if (!dateStr) return '';
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    };
+
+    if (filterType === 'this_month') {
+      return `Bulan Ini (${new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })})`;
+    }
+    
+    if (filterType === 'this_year') {
+      return `Tahun Ini (${new Date().getFullYear()})`;
+    }
+    
+    if (filterType === 'custom') {
+      if (startDate && endDate) {
+        return `Periode: ${formatDateIndonesia(startDate)} s.d. ${formatDateIndonesia(endDate)}`;
+      } else if (startDate) {
+        return `Sejak: ${formatDateIndonesia(startDate)}`;
+      } else if (endDate) {
+        return `s.d. Tanggal: ${formatDateIndonesia(endDate)}`;
+      }
+    }
+    return '';
+  };
+
   useEffect(() => {
     fetchData();
     // Load CALK local persistence values
@@ -162,11 +226,11 @@ export default function Reports() {
     setCalkCatatanTambahan(localStorage.getItem('calk_catatan') || 
       `1. Sekolah Cendekia Baznas (SCB) mempersiapkan laporan keuangan sesuai dengan PSAK 45 / ISAK 35 tentang Pelaporan Keuangan Entitas Nir Laba.\n2. Sumber pendanaan utama sekolah bersumber dari penyaluran Dana ZIS (Zakat, Infak, Sedekah) yang dikelola oleh BAZNAS Pusat.\n3. Saldo Aset Neto Sekolah di akhir tahun berjalan menunjukkan rasio likuiditas yang sehat guna mendukung beasiswa penuh bagi seluruh santri dhuafa.`
     );
-  }, [selectedUnit]);
+  }, [selectedUnit, startDate, endDate]);
 
   const fetchData = async () => {
     setLoading(true);
-    const reports = await getFinancialReports(selectedUnit);
+    const reports = await getFinancialReports(selectedUnit, startDate || undefined, endDate || undefined);
     setData(reports);
     setLoading(false);
   };
@@ -597,31 +661,21 @@ export default function Reports() {
   if (loading) return <div className="flex items-center justify-center h-full">Memuat Laporan...</div>;
   return (
     <div className="space-y-8">
-      <div className="flex justify-between items-center bg-white/40 p-1 rounded-2xl print:hidden">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/40 p-4 rounded-3xl border border-white/50 backdrop-blur-md print:hidden">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Laporan Keuangan</h1>
-          <p className="text-xs text-gray-450 uppercase tracking-widest mt-1 text-slate-400">Laporan otomatis berbasis posting jurnal</p>
+          <p className="text-xs text-gray-450 uppercase tracking-widest mt-1 text-slate-400 font-medium">Laporan otomatis berbasis posting jurnal</p>
         </div>
-        <div className="flex gap-3 items-center">
-          {/* School Unit Filter Selection */}
-          <select
-            value={selectedUnit}
-            onChange={(e) => setSelectedUnit(e.target.value as any)}
-            className="px-4 py-2.5 bg-white border border-natural-border rounded-xl text-xs text-slate-700 font-bold cursor-pointer focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-sm"
-          >
-            <option value="all">Unit: Konsolidasi (Gabungan)</option>
-            <option value="SMP">Unit: SMP</option>
-            <option value="SMA">Unit: SMA</option>
-            <option value="Umum">Unit: Umum</option>
-          </select>
-
-          <button
-            onClick={openLayoutEditor}
-            className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none"
-          >
-            <Sliders className="w-4 h-4 text-natural-primary" />
-            Atur Tata Letak
-          </button>
+        <div className="flex flex-wrap gap-2.5 items-center">
+          {!isViewer && (
+            <button
+              onClick={openLayoutEditor}
+              className="px-4 py-2.5 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-natural-primary hover:text-natural-primary/90 transition-all font-semibold text-xs flex items-center gap-2 shadow-sm cursor-pointer select-none"
+            >
+              <Sliders className="w-4 h-4 text-natural-primary" />
+              Atur Tata Letak
+            </button>
+          )}
           <button 
             onClick={() => window.print()}
             className="p-3 bg-white border border-natural-border hover:bg-natural-bg rounded-xl text-slate-700 hover:text-indigo-600 transition-all shadow-sm cursor-pointer"
@@ -660,6 +714,74 @@ export default function Reports() {
             )}
           </button>
         </div>
+      </div>
+
+      {/* Filter Bar */}
+      <div className="bg-white/60 border border-natural-border rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 print:hidden shadow-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-slate-500 text-xs font-semibold">
+            <Filter className="w-4 h-4 text-natural-primary" />
+            <span>Filter Laporan:</span>
+          </div>
+
+          {/* School Unit Filter Selector */}
+          <select
+            value={selectedUnit}
+            onChange={(e) => setSelectedUnit(e.target.value as any)}
+            className="px-3 py-2 bg-white border border-natural-border rounded-xl text-xs text-slate-700 font-bold cursor-pointer focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-xs"
+          >
+            <option value="all">Unit: Konsolidasi (Gabungan)</option>
+            <option value="SMP">Unit: SMP</option>
+            <option value="SMA">Unit: SMA</option>
+            <option value="Umum">Unit: Umum</option>
+          </select>
+
+          {/* Time Preset Filter */}
+          <select
+            value={filterType}
+            onChange={(e) => {
+              const val = e.target.value as any;
+              setFilterType(val);
+              const dates = getPeriodDates(val);
+              setStartDate(dates.start);
+              setEndDate(dates.end);
+            }}
+            className="px-3 py-2 bg-white border border-natural-border rounded-xl text-xs text-slate-700 font-bold cursor-pointer focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-xs"
+          >
+            <option value="all">Periode: Semua Waktu</option>
+            <option value="this_month">Periode: Bulan Ini</option>
+            <option value="this_year">Periode: Tahun Ini</option>
+            <option value="custom">Periode: Kustom (Pilih Tanggal)</option>
+          </select>
+        </div>
+
+        {/* Custom Date Inputs */}
+        {filterType === 'custom' && (
+          <motion.div
+            initial={{ opacity: 0, y: -5 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-wrap items-center gap-3 bg-slate-50/50 p-2 rounded-xl border border-slate-100"
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 font-medium">Dari:</span>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="px-2 py-1 bg-white border border-natural-border rounded-lg text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-xs"
+              />
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-500 font-medium">Sampai:</span>
+              <input
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                className="px-2 py-1 bg-white border border-natural-border rounded-lg text-xs text-slate-700 font-semibold focus:outline-none focus:ring-1 focus:ring-natural-primary shadow-xs"
+              />
+            </div>
+          </motion.div>
+        )}
       </div>
 
       <div className="flex border-b border-natural-border overflow-x-auto whitespace-nowrap scrollbar-none print:hidden">
@@ -720,7 +842,7 @@ export default function Reports() {
               : 'CATATAN ATAS LAPORAN KEUANGAN (CALK)'}
           </p>
           <div className="w-12 h-1 bg-natural-primary/20 mx-auto rounded-full mt-4" />
-          <p className="text-gray-400 text-[11px] font-medium pt-2 uppercase">Per {new Date().toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })}</p>
+          <p className="text-slate-500 text-[11px] font-bold pt-2 uppercase tracking-wide">{getPeriodLabel()}</p>
         </div>
 
         {activeTab === 'neraca' ? (
@@ -1156,9 +1278,9 @@ export default function Reports() {
                   </p>
                 )}
                 
-                {pdfLoading ? (
+                {pdfLoading || isViewer ? (
                   <div className="w-full text-xs font-sans text-slate-700 leading-relaxed whitespace-pre-wrap py-2 min-h-[120px]">
-                    {calkCatatanTambahan}
+                    {calkCatatanTambahan || (isViewer ? "Tidak ada catatan tambahan." : "")}
                   </div>
                 ) : (
                   <textarea 

@@ -41,9 +41,9 @@ service cloud.firestore {
 
     match /accounts/{accountId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidAccount(incoming());
-      allow update: if isSignedIn() && isValidAccount(incoming());
-      allow delete: if isSignedIn();
+      allow create: if isSignedIn() && isSuperAdmin() && isValidAccount(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidAccount(incoming());
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- Journal Entries ---
@@ -57,10 +57,9 @@ service cloud.firestore {
 
     match /journal_entries/{entryId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidJournalEntry(incoming());
-      allow update: if isSignedIn() && (isSuperAdmin() || isOwner(existing())) && isValidJournalEntry(incoming()) &&
-                    (isSuperAdmin() || incoming().createdAt == existing().createdAt);
-      allow delete: if isSignedIn() && (isSuperAdmin() || isOwner(existing()));
+      allow create: if isSignedIn() && isSuperAdmin() && isValidJournalEntry(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidJournalEntry(incoming());
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- Invoices ---
@@ -74,9 +73,9 @@ service cloud.firestore {
 
     match /invoices/{invoiceId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidInvoice(incoming());
-      allow update: if isSignedIn() && (isSuperAdmin() || isOwner(existing())) && isValidInvoice(incoming());
-      allow delete: if isSignedIn() && (isSuperAdmin() || isOwner(existing()));
+      allow create: if isSignedIn() && isSuperAdmin() && isValidInvoice(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidInvoice(incoming());
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- Debts & Receivables ---
@@ -102,9 +101,9 @@ service cloud.firestore {
 
     match /debts_receivables/{debtId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidDebtReceivable(incoming());
-      allow update: if isSignedIn() && (isSuperAdmin() || isOwner(existing())) && isValidDebtReceivable(incoming());
-      allow delete: if isSignedIn() && (isSuperAdmin() || isOwner(existing()));
+      allow create: if isSignedIn() && isSuperAdmin() && isValidDebtReceivable(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidDebtReceivable(incoming());
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- System Settings ---
@@ -124,8 +123,8 @@ service cloud.firestore {
 
     match /system_settings/{settingId} {
       allow read: if true;
-      allow create: if isSignedIn() && isValidId(settingId) && isValidSystemSetting(incoming());
-      allow update: if isSignedIn() && isValidId(settingId) && isValidSystemSetting(incoming());
+      allow create: if isSignedIn() && isSuperAdmin() && isValidId(settingId) && isValidSystemSetting(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidId(settingId) && isValidSystemSetting(incoming());
       allow delete: if isSignedIn() && isSuperAdmin();
     }
 
@@ -142,10 +141,10 @@ service cloud.firestore {
     }
 
     match /deleted_records/{recordId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidDeletedRecord(incoming());
+      allow read: if isSignedIn() && isSuperAdmin();
+      allow create: if isSignedIn() && isSuperAdmin() && isValidDeletedRecord(incoming());
       allow update: if false; // Cannot modify deleted items
-      allow delete: if isSignedIn();
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- Fixed Assets ---
@@ -165,9 +164,9 @@ service cloud.firestore {
 
     match /fixed_assets/{assetId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && isValidFixedAsset(incoming());
-      allow update: if isSignedIn() && (isSuperAdmin() || isOwner(existing())) && isValidFixedAsset(incoming());
-      allow delete: if isSignedIn() && (isSuperAdmin() || isOwner(existing()));
+      allow create: if isSignedIn() && isSuperAdmin() && isValidFixedAsset(incoming());
+      allow update: if isSignedIn() && isSuperAdmin() && isValidFixedAsset(incoming());
+      allow delete: if isSignedIn() && isSuperAdmin();
     }
 
     // --- User Roles (Aturan Akses) ---

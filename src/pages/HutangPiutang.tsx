@@ -155,7 +155,8 @@ function sanitizeColorString(text: string): string {
 }
 
 export default function HutangPiutang() {
-  const { hasPermission, isUnitAllowed } = useUserRole();
+  const { hasPermission, isUnitAllowed, userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
 
   if (!hasPermission('canDebt')) {
     return (
@@ -829,13 +830,15 @@ export default function HutangPiutang() {
             <Download className="w-4 h-4 text-slate-500" /> Ekspor & Cetak Laporan
           </button>
           
-          <button 
-            type="button"
-            onClick={() => { resetForm(); setIsAddEditOpen(true); }}
-            className="flex-1 sm:flex-none bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Catat Transaksi Baru
-          </button>
+          {!isViewer && (
+            <button 
+              type="button"
+              onClick={() => { resetForm(); setIsAddEditOpen(true); }}
+              className="flex-1 sm:flex-none bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-xs cursor-pointer"
+            >
+              <Plus className="w-4 h-4" /> Catat Transaksi Baru
+            </button>
+          )}
         </div>
       </div>
 
@@ -1045,19 +1048,19 @@ export default function HutangPiutang() {
                 <th className="px-6 py-4">Uang Muka (DP)</th>
                 <th className="px-6 py-4">Umur Piutang/Hutang</th>
                 <th className="px-6 py-4">Jatuh Tempo</th>
-                <th className="px-6 py-4 text-center">Aksi</th>
+                {!isViewer && <th className="px-6 py-4 text-center">Aksi</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400 italic font-sans text-xs">
+                  <td colSpan={isViewer ? 5 : 6} className="text-center py-12 text-gray-400 italic font-sans text-xs">
                     Memuat data monitoring hutang & piutang...
                   </td>
                 </tr>
               ) : filteredAndSortedDebts.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="text-center py-12 text-gray-400 italic font-sans text-xs">
+                  <td colSpan={isViewer ? 5 : 6} className="text-center py-12 text-gray-400 italic font-sans text-xs">
                     Tidak ada data transaksi yang sesuai dengan kriteria filter Anda.
                   </td>
                 </tr>
@@ -1164,55 +1167,57 @@ export default function HutangPiutang() {
                       </td>
 
                       {/* Interactive Operations Column */}
-                      <td className="px-6 py-4">
-                        <div className="flex items-center justify-center gap-2">
-                          {/* Payment Registration */}
-                          {item.status !== 'Lunas' ? (
+                      {!isViewer && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            {/* Payment Registration */}
+                            {item.status !== 'Lunas' ? (
+                              <button
+                                type="button"
+                                onClick={() => { setSelectedDebt(item); setPayAmount(item.remainingBalance); setIsPaymentOpen(true); }}
+                                className="px-3 py-1.5 bg-natural-primary/10 text-natural-primary hover:bg-natural-primary hover:text-white transition-all rounded-xl text-[10px] font-bold tracking-wider uppercase flex items-center gap-1"
+                                title="Catat Angsuran / Pelunasan"
+                              >
+                                <Coins className="w-3 h-3" /> Bayar
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl flex items-center gap-1">
+                                <CheckCircle className="w-3.5 h-3.5" /> Lunas
+                              </span>
+                            )}
+
+                            {/* Historical logs */}
                             <button
                               type="button"
-                              onClick={() => { setSelectedDebt(item); setPayAmount(item.remainingBalance); setIsPaymentOpen(true); }}
-                              className="px-3 py-1.5 bg-natural-primary/10 text-natural-primary hover:bg-natural-primary hover:text-white transition-all rounded-xl text-[10px] font-bold tracking-wider uppercase flex items-center gap-1"
-                              title="Catat Angsuran / Pelunasan"
+                              onClick={() => { setSelectedDebt(item); setIsHistoryOpen(true); }}
+                              className="p-2 border border-natural-border hover:bg-slate-55 rounded-xl text-slate-500 transition-colors"
+                              title="Riwayat Angsuran"
                             >
-                              <Coins className="w-3 h-3" /> Bayar
+                              <History className="w-3.5 h-3.5" />
                             </button>
-                          ) : (
-                            <span className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest bg-emerald-50 border border-emerald-100 px-3 py-1.5 rounded-xl flex items-center gap-1">
-                              <CheckCircle className="w-3.5 h-3.5" /> Lunas
-                            </span>
-                          )}
 
-                          {/* Historical logs */}
-                          <button
-                            type="button"
-                            onClick={() => { setSelectedDebt(item); setIsHistoryOpen(true); }}
-                            className="p-2 border border-natural-border hover:bg-slate-50 rounded-xl text-slate-500 transition-colors"
-                            title="Riwayat Angsuran"
-                          >
-                            <History className="w-3.5 h-3.5" />
-                          </button>
+                            {/* Edit Details */}
+                            <button
+                              type="button"
+                              onClick={() => openEdit(item)}
+                              className="p-2 border border-natural-border hover:bg-slate-50 rounded-xl text-slate-500 hover:text-natural-primary transition-colors"
+                              title="Detail / Ubah"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
 
-                          {/* Edit Details */}
-                          <button
-                            type="button"
-                            onClick={() => openEdit(item)}
-                            className="p-2 border border-natural-border hover:bg-slate-50 rounded-xl text-slate-500 hover:text-natural-primary transition-colors"
-                            title="Detail / Ubah"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Delete Item */}
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(item.id)}
-                            className="p-2 border border-rose-100 bg-rose-50/50 hover:bg-rose-50 text-rose-500 hover:text-rose-600 rounded-xl transition-colors"
-                            title="Hapus Transaksi"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
+                            {/* Delete Item */}
+                            <button
+                              type="button"
+                              onClick={() => handleDelete(item.id)}
+                              className="p-2 border border-rose-100 bg-rose-50/50 hover:bg-rose-50 text-rose-500 hover:text-rose-600 rounded-xl transition-colors"
+                              title="Hapus Transaksi"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })

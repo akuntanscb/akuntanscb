@@ -149,7 +149,8 @@ function sanitizeColorString(text: string): string {
 }
 
 export default function Invoices() {
-  const { hasPermission, isUnitAllowed } = useUserRole();
+  const { hasPermission, isUnitAllowed, userRole } = useUserRole();
+  const isViewer = userRole?.role === 'viewer';
 
   if (!hasPermission('canInvoices')) {
     return (
@@ -632,12 +633,14 @@ export default function Invoices() {
           <h1 className="text-3xl font-serif italic text-natural-primary">Faktur & Bukti Kas</h1>
           <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Kelola tagihan, pencatatan bukti donasi, dan pengeluaran</p>
         </div>
-        <button 
-          onClick={openNewInvoiceModal}
-          className="w-full sm:w-auto bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-xs cursor-pointer"
-        >
-          <Plus className="w-4 h-4" /> Buat Faktur Baru
-        </button>
+        {!isViewer && (
+          <button 
+            onClick={openNewInvoiceModal}
+            className="w-full sm:w-auto bg-natural-primary hover:opacity-90 text-white px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-xs cursor-pointer"
+          >
+            <Plus className="w-4 h-4" /> Buat Faktur Baru
+          </button>
+        )}
       </div>
 
       {/* KPI METADATA PANELS */}
@@ -827,13 +830,15 @@ export default function Invoices() {
                         </button>
                         
                         {/* Edit icon */}
-                        <button 
-                          onClick={() => openEditInvoiceModal(inv)}
-                          className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 cursor-pointer"
-                          title="Ubah Faktur"
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
+                        {!isViewer && (
+                          <button 
+                            onClick={() => openEditInvoiceModal(inv)}
+                            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-600 cursor-pointer"
+                            title="Ubah Faktur"
+                          >
+                            <Edit3 className="w-4 h-4" />
+                          </button>
+                        )}
 
                         {/* Direct print PDF icon */}
                         <button 
@@ -846,13 +851,15 @@ export default function Invoices() {
                         </button>
                         
                         {/* Trash icon for deleting */}
-                        <button 
-                          onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
-                          className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 cursor-pointer"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isViewer && (
+                          <button 
+                            onClick={() => handleDeleteInvoice(inv.id, inv.invoiceNumber)}
+                            className="p-1.5 hover:bg-red-50 rounded-lg text-red-500 cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
