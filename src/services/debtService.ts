@@ -37,6 +37,15 @@ export const generateHutangRefNumber = (): string => {
   return `HT-${year}${month}${day}-${rand}`;
 };
 
+export const generatePiutangRefNumber = (): string => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  const rand = Math.floor(100 + Math.random() * 900);
+  return `PT-${year}${month}${day}-${rand}`;
+};
+
 export const getDebts = async (): Promise<DebtReceivable[]> => {
   try {
     const q = query(collection(db, COLLECTION_PATH), orderBy('date', 'desc'));
@@ -125,13 +134,14 @@ export const createDebt = async (
 
     const refNum = isUangMuka 
       ? generateDpRefNumber() 
-      : (type === 'Hutang' ? generateHutangRefNumber() : '');
+      : (type === 'Hutang' ? generateHutangRefNumber() : generatePiutangRefNumber());
 
     // 2. Draft & save automatically balanced Journal entry
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
       date: Timestamp.fromDate(date),
       description: isUangMuka ? `Disbursement Panjar/Uang Muka ke PIC: ${picName || 'Tanpa PIC'} (${remarks || 'Tanpa Keterangan'})` : `Kontrol ${type}: ${name} (${remarks || 'Tanpa Keterangan'})`,
-      reference: isUangMuka ? 'UM-AUTO' : (type === 'Piutang' ? 'PT-AUTO' : 'HT-AUTO'),
+      reference: refNum,
+      dpRefNumber: refNum,
       lines,
       createdBy: userId,
       createdAt: Timestamp.now(),
@@ -212,10 +222,12 @@ export const addDebtPayment = async (
     }
 
     // 2. Add as General Journal entry
+    const paymentRef = currentData.dpRefNumber || (currentData.type === 'Piutang' ? 'PT-BYR' : 'HT-BYR');
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
       date: Timestamp.fromDate(paymentDate),
       description: `Angsuran ${currentData.type}: ${currentData.name} (${paymentNotes || 'Tanpa Memo'})`,
-      reference: currentData.type === 'Piutang' ? 'PT-BYR' : 'HT-BYR',
+      reference: paymentRef,
+      dpRefNumber: paymentRef,
       lines,
       createdBy: currentData.createdBy,
       createdAt: Timestamp.now(),
@@ -526,7 +538,18 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
         const dueDate = new Date(date);
         dueDate.setDate(dueDate.getDate() + 30);
 
-        const refNum = isUM ? generateDpRefNumber() : '';
+        let refNum = journalEntry.reference || journalEntry.dpRefNumber || '';
+        if (!refNum) {
+          refNum = isUM ? generateDpRefNumber() : generatePiutangRefNumber();
+        }
+
+        if (journalEntry.dpRefNumber !== refNum || !journalEntry.reference) {
+          await updateDoc(doc(db, 'journal_entries', journalId), {
+            reference: journalEntry.reference || refNum,
+            dpRefNumber: refNum
+          });
+        }
+
         const pic = journalEntry.picName || '';
 
         await addDoc(collection(db, COLLECTION_PATH), {
@@ -538,7 +561,7 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           downPayment: isUM ? 0 : downPayment,
           paidAmount: 0,
           remainingBalance,
-          remarks: isUM ? `Uang Muka Otomatis Jurnal (Ref: ${reference})` : `Otomatis dari Jurnal Umum (Ref: ${reference})`,
+          remarks: isUM ? `Uang Muka Otomatis Jurnal (Ref: ${refNum})` : `Otomatis dari Jurnal Umum (Ref: ${refNum})`,
           status,
           payments: [],
           createdBy,
@@ -584,7 +607,18 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
         const dueDate = new Date(date);
         dueDate.setDate(dueDate.getDate() + 30);
 
-        const refNum = generateHutangRefNumber();
+        let refNum = journalEntry.reference || journalEntry.dpRefNumber || '';
+        if (!refNum) {
+          refNum = generateHutangRefNumber();
+        }
+
+        if (journalEntry.dpRefNumber !== refNum || !journalEntry.reference) {
+          await updateDoc(doc(db, 'journal_entries', journalId), {
+            reference: journalEntry.reference || refNum,
+            dpRefNumber: refNum
+          });
+        }
+
         const pic = journalEntry.picName || '';
 
         await addDoc(collection(db, COLLECTION_PATH), {
@@ -596,7 +630,7 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           downPayment,
           paidAmount: 0,
           remainingBalance,
-          remarks: `Otomatis dari Jurnal Umum (Ref: ${reference})`,
+          remarks: `Otomatis dari Jurnal Umum (Ref: ${refNum})`,
           status,
           payments: [],
           createdBy,
@@ -613,8 +647,8 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       else if (isPiutangAccount && line.credit > 0) {
         let matchedDebt: any = null;
 
-        // Prioritize matching explicitly by dpRefNumber if provided
-        const linkedRefNum = journalEntry.dpRefNumber;
+        // Prioritize matching explicitly by dpRefNumber or reference if provided
+        const linkedRefNum = journalEntry.dpRefNumber || journalEntry.reference;
         if (linkedRefNum) {
           const qRef = query(
             collection(db, COLLECTION_PATH),
@@ -691,8 +725,8 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       else if (isHutangAccount && line.debit > 0) {
         let matchedDebt: any = null;
 
-        // Prioritize matching explicitly by dpRefNumber if provided
-        const linkedRefNum = journalEntry.dpRefNumber;
+        // Prioritize matching explicitly by dpRefNumber or reference if provided
+        const linkedRefNum = journalEntry.dpRefNumber || journalEntry.reference;
         if (linkedRefNum) {
           const qRef = query(
             collection(db, COLLECTION_PATH),

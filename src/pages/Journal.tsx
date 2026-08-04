@@ -204,7 +204,8 @@ export default function Journal() {
       if (!auth.currentUser) throw new Error('Anda harus masuk untuk mencatat jurnal.');
       if (!description) throw new Error('Keterangan harus diisi.');
 
-      await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
+      const finalReference = selectedDpRef || reference;
+      await createJournalEntry(description, finalReference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
 
       // Auto increment reference number if present
       if (reference) {
@@ -352,11 +353,12 @@ export default function Journal() {
       if (!auth.currentUser) throw new Error('Anda harus masuk untuk mencatat jurnal.');
       if (!description) throw new Error('Keterangan harus diisi.');
       
+      const finalReference = selectedDpRef || reference;
       if (isEditingMode && editingEntry) {
         await updateJournalEntry(
           editingEntry.id,
           description,
-          reference,
+          finalReference,
           lines,
           new Date(date),
           editingEntry.createdBy,
@@ -366,7 +368,7 @@ export default function Journal() {
           schoolUnit
         );
       } else {
-        await createJournalEntry(description, reference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
+        await createJournalEntry(description, finalReference, lines, auth.currentUser.uid, new Date(date), picName, selectedDpRef, schoolUnit);
       }
       
       handleCancelForm();
@@ -503,6 +505,7 @@ export default function Journal() {
   const handleSelectDpRef = (refNum: string) => {
     setSelectedDpRef(refNum);
     if (!refNum) return;
+    setReference(refNum);
     const um = debts.find((d) => d.dpRefNumber === refNum);
     if (um) {
       if (um.picName) {
@@ -516,6 +519,7 @@ export default function Journal() {
   const handleSelectHutangRef = (refNum: string) => {
     setSelectedDpRef(refNum);
     if (!refNum) return;
+    setReference(refNum);
     const debt = debts.find((d) => d.dpRefNumber === refNum);
     if (debt) {
       if (debt.picName) {

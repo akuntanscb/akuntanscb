@@ -537,6 +537,7 @@ export default function HutangPiutang() {
 
     const headers = [
       "No",
+      "Nomor Referensi",
       "Nama Debitur/Kreditur",
       "Tipe Transaksi",
       "Nominal Total",
@@ -560,9 +561,11 @@ export default function HutangPiutang() {
       const isDP = item.isUangMuka ? "Ya" : "Tidak";
       const pic = (item as any).picName || "";
       const remarks = item.remarks || "";
+      const refNum = item.dpRefNumber || "";
 
       return [
         index + 1,
+        `"${refNum.replace(/"/g, '""')}"`,
         `"${item.name.replace(/"/g, '""')}"`,
         item.type,
         item.totalAmount,
@@ -1108,10 +1111,10 @@ export default function HutangPiutang() {
                           <p className="font-semibold text-slate-850 text-sm font-sans">{item.name}</p>
                           <p className="text-[10px] text-gray-400 font-sans max-w-xs truncate">{item.remarks || 'Tanpa keterangan'}</p>
                         </div>
-                        {item.isUangMuka && (
+                        {(item.dpRefNumber || (item as any).picName || item.isUangMuka) && (
                           <div className="flex flex-wrap items-center gap-2 mt-1 select-none">
                             {item.dpRefNumber && (
-                              <span className="font-mono text-[9px] text-emerald-800 bg-emerald-50/50 px-2 py-0.5 rounded-md border border-emerald-150 font-semibold uppercase">
+                              <span className="font-mono text-[9px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-semibold uppercase">
                                 Ref: {item.dpRefNumber}
                               </span>
                             )}
