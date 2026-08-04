@@ -34,6 +34,7 @@ import { Shield } from 'lucide-react';
 
 interface ParsedEntry {
   dateStr: string;
+  parsedDate?: Date | null;
   reference: string;
   description: string;
   picName: string;
@@ -528,6 +529,42 @@ export default function Journal() {
   // EXPORT & IMPORT ENGINE ROUTINES
   // ==========================================
 
+  const parseDateString = (dateStr: string): Date | null => {
+    if (!dateStr || typeof dateStr !== 'string') return null;
+    const cleanStr = dateStr.trim();
+    if (!cleanStr) return null;
+
+    // 1. Try DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY (Hari/Bulan/Tahun - Standar Indonesia)
+    const dmyMatch = cleanStr.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/);
+    if (dmyMatch) {
+      const day = parseInt(dmyMatch[1], 10);
+      const month = parseInt(dmyMatch[2], 10) - 1;
+      const year = parseInt(dmyMatch[3], 10);
+      if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+
+    // 2. Try YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD (ISO format: Tahun-Bulan-Hari)
+    const ymdMatch = cleanStr.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+    if (ymdMatch) {
+      const year = parseInt(ymdMatch[1], 10);
+      const month = parseInt(ymdMatch[2], 10) - 1;
+      const day = parseInt(ymdMatch[3], 10);
+      if (month >= 0 && month <= 11 && day >= 1 && day <= 31 && year >= 1900 && year <= 2100) {
+        const d = new Date(year, month, day);
+        if (!isNaN(d.getTime())) return d;
+      }
+    }
+
+    // 3. Fallback to native JS Date for ISO timestamp strings
+    const d = new Date(cleanStr);
+    if (!isNaN(d.getTime())) return d;
+
+    return null;
+  };
+
   const parseCSV = (text: string): string[][] => {
     const result: string[][] = [];
     const lines = text.split(/\r?\n/);
@@ -574,7 +611,7 @@ export default function Journal() {
     const rows = [headers];
     
     dataToExport.forEach(entry => {
-      const dateStr = format(entry.date.toDate(), 'yyyy-MM-dd');
+      const dateStr = format(entry.date.toDate(), 'dd/MM/yyyy');
       const pic = (entry as any).picName || '';
       entry.lines.forEach(line => {
         const acc = accounts.find(a => a.id === line.accountId);
@@ -651,10 +688,10 @@ export default function Journal() {
 
     const rows = [
       headers,
-      ["2026-05-22", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", kasCode, "Kas Sekolah", "1500000", "0"],
-      ["2026-05-22", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", sppCode, "Pendapatan SPP Bulanan", "0", "1500000"],
-      ["2026-05-22", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", bebanCode, "Beban ATK", "350000", "0"],
-      ["2026-05-22", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", kasCode, "Kas Sekolah", "0", "350000"]
+      ["22/05/2026", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", kasCode, "Kas Sekolah", "1500000", "0"],
+      ["22/05/2026", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", sppCode, "Pendapatan SPP Bulanan", "0", "1500000"],
+      ["22/05/2026", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", bebanCode, "Beban ATK", "350000", "0"],
+      ["22/05/2026", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", kasCode, "Kas Sekolah", "0", "350000"]
     ];
 
     const csvContent = "\uFEFF" + rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -782,7 +819,9 @@ export default function Journal() {
           }
           
           parsedArray.forEach((item: any) => {
-            const dateStr = item.date ? format(new Date(item.date), 'yyyy-MM-dd') : '';
+            const rawDate = item.date ? item.date : '';
+            const pDate = rawDate ? parseDateString(rawDate) : null;
+            const dateStr = pDate ? format(pDate, 'dd/MM/yyyy') : rawDate;
             const lines = (item.lines || []).map((l: any) => ({
               accountCode: l.accountCode || '',
               accountName: l.accountName || '',
@@ -792,6 +831,7 @@ export default function Journal() {
             
             tempParsedList.push({
               dateStr,
+              parsedDate: pDate,
               reference: item.reference || '',
               description: item.description || '',
               picName: item.picName || '',
@@ -809,9 +849,11 @@ export default function Journal() {
           if (!entry.dateStr) {
             errors.push("Tanggal kosong.");
           } else {
-            const tDate = new Date(entry.dateStr);
-            if (isNaN(tDate.getTime())) {
-              errors.push(`Tanggal '${entry.dateStr}' tidak valid.`);
+            const pDate = parseDateString(entry.dateStr);
+            if (!pDate) {
+              errors.push(`Tanggal '${entry.dateStr}' tidak valid. Gunakan format Hari/Bulan/Tahun (contoh: 22/05/2026 atau 22-05-2026).`);
+            } else {
+              entry.parsedDate = pDate;
             }
           }
           
@@ -896,12 +938,14 @@ export default function Journal() {
           };
         });
         
+        const targetDate = entry.parsedDate || parseDateString(entry.dateStr) || new Date();
+        
         await createJournalEntry(
           entry.description,
           entry.reference,
           linesToSubmit,
           uId,
-          new Date(entry.dateStr),
+          targetDate,
           entry.picName || '',
           ''
         );
@@ -1053,7 +1097,7 @@ export default function Journal() {
                       </div>
                       <div>
                         <h3 className="font-serif italic font-bold text-slate-850 text-base">Impor Data Jurnal</h3>
-                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah spreadsheet Anda untuk membuat laporan otomatis instant</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Unggah spreadsheet Anda • Format tanggal: Hari/Bulan/Tahun (contoh: 22/05/2026)</p>
                       </div>
                     </div>
                     <button
@@ -1164,7 +1208,7 @@ export default function Journal() {
                           )}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          Tanggal: {pe.dateStr} {pe.picName ? `• PIC: ${pe.picName}` : ''}
+                          Tanggal: {pe.parsedDate ? format(pe.parsedDate, 'dd/MM/yyyy') : pe.dateStr} {pe.picName ? `• PIC: ${pe.picName}` : ''}
                         </div>
                         {/* Errors report */}
                         {!pe.isValid && (
