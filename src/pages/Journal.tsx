@@ -36,6 +36,7 @@ interface ParsedEntry {
   dateStr: string;
   parsedDate?: Date | null;
   reference: string;
+  schoolUnit?: 'SMP' | 'SMA' | 'Umum';
   description: string;
   picName: string;
   lines: {
@@ -607,12 +608,13 @@ export default function Journal() {
       return;
     }
     
-    const headers = ["Tanggal", "Referensi", "Keterangan", "PIC", "Kode Akun", "Nama Akun", "Debit", "Kredit"];
+    const headers = ["Tanggal", "Referensi", "Unit", "Keterangan", "PIC", "Kode Akun", "Nama Akun", "Debit", "Kredit"];
     const rows = [headers];
     
     dataToExport.forEach(entry => {
       const dateStr = format(entry.date.toDate(), 'dd/MM/yyyy');
       const pic = (entry as any).picName || '';
+      const unit = entry.schoolUnit || 'Umum';
       entry.lines.forEach(line => {
         const acc = accounts.find(a => a.id === line.accountId);
         const code = acc ? acc.code : '';
@@ -620,6 +622,7 @@ export default function Journal() {
         rows.push([
           dateStr,
           entry.reference,
+          unit,
           entry.description,
           pic,
           code,
@@ -656,6 +659,7 @@ export default function Journal() {
       date: entry.date.toDate().toISOString(),
       description: entry.description,
       reference: entry.reference,
+      schoolUnit: entry.schoolUnit || 'Umum',
       picName: (entry as any).picName || '',
       dpRefNumber: (entry as any).dpRefNumber || '',
       lines: entry.lines.map(line => {
@@ -681,17 +685,17 @@ export default function Journal() {
   };
 
   const handleDownloadTemplate = () => {
-    const headers = ["Tanggal", "Referensi", "Keterangan", "PIC", "Kode Akun", "Nama Akun", "Debit", "Kredit"];
+    const headers = ["Tanggal", "Referensi", "Unit", "Keterangan", "PIC", "Kode Akun", "Nama Akun", "Debit", "Kredit"];
     const kasCode = accounts.find(a => a.name.toLowerCase().includes('kas') || a.code.startsWith('1-1'))?.code || '1-10001';
     const sppCode = accounts.find(a => a.name.toLowerCase().includes('spp') || a.name.toLowerCase().includes('bulanan') || a.code.startsWith('4-'))?.code || '4-40001';
     const bebanCode = accounts.find(a => a.name.toLowerCase().includes('beban') || a.name.toLowerCase().includes('belanja') || a.code.startsWith('5-'))?.code || '5-50001';
 
     const rows = [
       headers,
-      ["22/05/2026", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", kasCode, "Kas Sekolah", "1500000", "0"],
-      ["22/05/2026", "BM-001", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", sppCode, "Pendapatan SPP Bulanan", "0", "1500000"],
-      ["22/05/2026", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", bebanCode, "Beban ATK", "350000", "0"],
-      ["22/05/2026", "BK-001", "Pembelian Kertas dan Alat Tulis Kantor", "", kasCode, "Kas Sekolah", "0", "350000"]
+      ["22/05/2026", "BM-001", "SMP", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", kasCode, "Kas Sekolah", "1500000", "0"],
+      ["22/05/2026", "BM-001", "SMP", "Penerimaan SPP Siswa Kelas 1", "Siti Aminah", sppCode, "Pendapatan SPP Bulanan", "0", "1500000"],
+      ["22/05/2026", "BK-001", "SMA", "Pembelian Kertas dan Alat Tulis Kantor", "", bebanCode, "Beban ATK", "350000", "0"],
+      ["22/05/2026", "BK-001", "SMA", "Pembelian Kertas dan Alat Tulis Kantor", "", kasCode, "Kas Sekolah", "0", "350000"]
     ];
 
     const csvContent = "\uFEFF" + rows.map(r => r.map(val => `"${val.replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -759,6 +763,7 @@ export default function Journal() {
           const headers = csvRows[0].map(h => h.toLowerCase().replace(/[\ufeff\s]/g, ''));
           const idxDate = headers.indexOf('tanggal');
           const idxRef = headers.indexOf('referensi');
+          const idxUnit = headers.findIndex(h => h === 'unit' || h === 'unitsekolah' || h === 'unit_sekolah');
           const idxDesc = headers.indexOf('keterangan');
           const idxPic = headers.indexOf('pic');
           const idxCode = headers.indexOf('kodeakun');
@@ -779,6 +784,11 @@ export default function Journal() {
             
             const dateStr = row[idxDate] || '';
             const reference = idxRef !== -1 ? (row[idxRef] || '') : '';
+            const rawUnit = idxUnit !== -1 ? (row[idxUnit] || '').trim().toUpperCase() : '';
+            let schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum';
+            if (rawUnit === 'SMP') schoolUnit = 'SMP';
+            else if (rawUnit === 'SMA') schoolUnit = 'SMA';
+
             const description = idxDesc !== -1 ? (row[idxDesc] || '') : '';
             const picName = idxPic !== -1 ? (row[idxPic] || '') : '';
             const accountCode = row[idxCode] || '';
@@ -789,6 +799,7 @@ export default function Journal() {
             const isSameGroup = currentGroup && 
               currentGroup.dateStr === dateStr && 
               currentGroup.reference === reference && 
+              currentGroup.schoolUnit === schoolUnit &&
               currentGroup.description === description;
               
             if (isSameGroup && currentGroup) {
@@ -800,6 +811,7 @@ export default function Journal() {
               currentGroup = {
                 dateStr,
                 reference,
+                schoolUnit,
                 description,
                 picName,
                 lines: [{ accountCode, accountName, debit, credit }],
@@ -822,6 +834,11 @@ export default function Journal() {
             const rawDate = item.date ? item.date : '';
             const pDate = rawDate ? parseDateString(rawDate) : null;
             const dateStr = pDate ? format(pDate, 'dd/MM/yyyy') : rawDate;
+            const rawUnit = (item.schoolUnit || item.unit || '').toString().trim().toUpperCase();
+            let schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum';
+            if (rawUnit === 'SMP') schoolUnit = 'SMP';
+            else if (rawUnit === 'SMA') schoolUnit = 'SMA';
+
             const lines = (item.lines || []).map((l: any) => ({
               accountCode: l.accountCode || '',
               accountName: l.accountName || '',
@@ -833,6 +850,7 @@ export default function Journal() {
               dateStr,
               parsedDate: pDate,
               reference: item.reference || '',
+              schoolUnit,
               description: item.description || '',
               picName: item.picName || '',
               lines,
@@ -947,7 +965,8 @@ export default function Journal() {
           uId,
           targetDate,
           entry.picName || '',
-          ''
+          '',
+          entry.schoolUnit || 'Umum'
         );
         
         importedCount++;
@@ -1204,6 +1223,18 @@ export default function Journal() {
                           {pe.reference && (
                             <span className="font-mono text-[10px] bg-slate-100 border px-1.5 py-0.2 rounded text-slate-500">
                               {pe.reference}
+                            </span>
+                          )}
+                          {pe.schoolUnit && (
+                            <span className={cn(
+                              "text-[9px] px-1.5 py-0.5 rounded font-bold uppercase tracking-wider border",
+                              pe.schoolUnit === 'SMP' 
+                                ? "bg-sky-50 text-sky-700 border-sky-150" 
+                                : pe.schoolUnit === 'SMA'
+                                ? "bg-indigo-50 text-indigo-700 border-indigo-150"
+                                : "bg-slate-100 text-slate-600 border-slate-200"
+                            )}>
+                              Unit: {pe.schoolUnit}
                             </span>
                           )}
                         </div>
