@@ -203,6 +203,7 @@ export default function HutangPiutang() {
   const [formTotal, setFormTotal] = useState<number>(0);
   const [formDownPayment, setFormDownPayment] = useState<number>(0);
   const [formRemarks, setFormRemarks] = useState<string>('');
+  const [formRefNumber, setFormRefNumber] = useState<string>('');
   const [editId, setEditId] = useState<string | null>(null);
   const [isUangMuka, setIsUangMuka] = useState<boolean>(false);
   const [picName, setPicName] = useState<string>('');
@@ -396,7 +397,8 @@ export default function HutangPiutang() {
           downPayment: isUangMuka ? 0 : formDownPayment,
           remarks: formRemarks,
           picName: isUangMuka ? picName : '',
-          schoolUnit: formSchoolUnit
+          schoolUnit: formSchoolUnit,
+          refNumber: formRefNumber.trim()
         });
         showToast('Berhasil mengubah data transaksi.');
       } else {
@@ -412,7 +414,8 @@ export default function HutangPiutang() {
           isUangMuka,
           isUangMuka ? picName : '',
           formCashAccountId,
-          formSchoolUnit
+          formSchoolUnit,
+          formRefNumber.trim() || undefined
         );
         showToast('Berhasil mencatat transaksi hutang-piutang baru.');
       }
@@ -435,6 +438,7 @@ export default function HutangPiutang() {
     setFormTotal(0);
     setFormDownPayment(0);
     setFormRemarks('');
+    setFormRefNumber('');
     setEditId(null);
     setIsUangMuka(false);
     setPicName('');
@@ -455,6 +459,7 @@ export default function HutangPiutang() {
     setFormTotal(debt.totalAmount);
     setFormDownPayment(debt.downPayment || 0);
     setFormRemarks(debt.remarks || '');
+    setFormRefNumber(debt.reference || debt.dpRefNumber || '');
     setIsUangMuka(!!debt.isUangMuka);
     setPicName((debt as any).picName || '');
     setFormSchoolUnit(debt.schoolUnit || 'Umum');
@@ -561,7 +566,7 @@ export default function HutangPiutang() {
       const isDP = item.isUangMuka ? "Ya" : "Tidak";
       const pic = (item as any).picName || "";
       const remarks = item.remarks || "";
-      const refNum = item.dpRefNumber || "";
+      const refNum = item.reference || item.dpRefNumber || "";
 
       return [
         index + 1,
@@ -1111,11 +1116,11 @@ export default function HutangPiutang() {
                           <p className="font-semibold text-slate-850 text-sm font-sans">{item.name}</p>
                           <p className="text-[10px] text-gray-400 font-sans max-w-xs truncate">{item.remarks || 'Tanpa keterangan'}</p>
                         </div>
-                        {(item.dpRefNumber || (item as any).picName || item.isUangMuka) && (
+                        {(item.reference || item.dpRefNumber || (item as any).picName || item.isUangMuka) && (
                           <div className="flex flex-wrap items-center gap-2 mt-1 select-none">
-                            {item.dpRefNumber && (
+                            {(item.reference || item.dpRefNumber) && (
                               <span className="font-mono text-[9px] text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200 font-semibold uppercase">
-                                Ref: {item.dpRefNumber}
+                                Ref: {item.reference || item.dpRefNumber}
                               </span>
                             )}
                             {(item as any).picName && (
@@ -1349,6 +1354,25 @@ export default function HutangPiutang() {
                     onChange={(e) => setFormName(e.target.value)}
                     className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-natural-text focus:outline-none focus:ring-1 focus:ring-natural-primary"
                   />
+                </div>
+
+                {/* Nomor Referensi (Ref #) */}
+                <div>
+                  <label htmlFor="formRefNumber" className="block text-[10px] uppercase tracking-widest text-gray-400 font-bold mb-1">
+                    Nomor Referensi (Ref #)
+                  </label>
+                  <input
+                    id="formRefNumber"
+                    type="text"
+                    maxLength={50}
+                    placeholder="Contoh: REF-2026-001 / INV-889 (Opsional, otomatis dibuat jika kosong)"
+                    value={formRefNumber}
+                    onChange={(e) => setFormRefNumber(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-natural-border rounded-xl text-xs text-natural-text font-mono focus:outline-none focus:ring-1 focus:ring-natural-primary"
+                  />
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Nomor ini akan terhubung langsung dengan referensi Jurnal Umum dan Buku Besar.
+                  </p>
                 </div>
 
                 {/* Trans Date & Due Date Row */}

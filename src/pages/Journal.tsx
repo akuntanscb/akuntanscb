@@ -989,27 +989,27 @@ export default function Journal() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-serif italic text-natural-primary">Jurnal Umum</h1>
-          <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Pencatatan transaksi harian sekolah</p>
+          <h1 className="text-2xl sm:text-3xl font-serif italic text-natural-primary">Jurnal Umum</h1>
+          <p className="text-[10px] sm:text-xs text-gray-400 uppercase tracking-widest mt-0.5 sm:mt-1">Pencatatan transaksi harian sekolah</p>
         </div>
-        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             onClick={() => {
               setShowImportExport(!showImportExport);
               if (showForm) handleCancelForm();
             }}
             className={cn(
-              "px-5 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm border text-sm w-full sm:w-auto cursor-pointer select-none",
+              "px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-full flex items-center justify-center gap-1.5 sm:gap-2 transition-all font-semibold shadow-2xs border text-xs sm:text-sm flex-1 sm:flex-none cursor-pointer select-none",
               showImportExport 
                 ? "bg-amber-50 text-amber-700 border-amber-200" 
                 : "bg-white border-natural-border text-slate-700 hover:bg-slate-50"
             )}
           >
-            <FileSpreadsheet className="w-4 h-4 shrink-0" />
-            {isViewer ? 'Ekspor Jurnal' : 'Ekspor & Impor'}
+            <FileSpreadsheet className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+            <span>{isViewer ? 'Ekspor' : 'Ekspor/Impor'}</span>
           </button>
           
           {!isViewer && (
@@ -1023,12 +1023,12 @@ export default function Journal() {
                 }
               }}
               className={cn(
-                "px-6 py-2.5 rounded-full flex items-center justify-center gap-2 transition-all font-semibold shadow-sm text-sm w-full sm:w-auto cursor-pointer select-none",
+                "px-4 sm:px-6 py-2 sm:py-2.5 rounded-xl sm:rounded-full flex items-center justify-center gap-1.5 sm:gap-2 transition-all font-semibold shadow-xs text-xs sm:text-sm flex-1 sm:flex-none cursor-pointer select-none",
                 showForm ? "bg-rose-50 text-rose-600 border border-rose-200" : "bg-natural-primary text-white hover:opacity-90"
               )}
             >
-              {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showForm ? 'Batal' : 'Entri Jurnal'}
+              {showForm ? <X className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
+              <span>{showForm ? 'Batal' : 'Entri Jurnal'}</span>
             </button>
           )}
         </div>
@@ -1281,62 +1281,62 @@ export default function Journal() {
         <motion.div 
           initial={{ opacity: 0, scale: 0.98 }}
           animate={{ opacity: 1, scale: 1 }}
-          className="bg-white p-8 rounded-3xl border border-natural-border shadow-xl"
+          className="bg-white p-4 sm:p-6 lg:p-8 rounded-2xl sm:rounded-3xl border border-natural-border shadow-md sm:shadow-xl"
         >
           {isEditingMode && (
-            <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-200 text-amber-800 text-sm flex justify-between items-center">
+            <div className="mb-4 sm:mb-6 p-3 sm:p-4 bg-amber-50 rounded-xl sm:rounded-2xl border border-amber-200 text-amber-800 text-xs sm:text-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
-                <h3 className="font-serif italic font-semibold text-amber-900 text-base">Ubah Jurnal Umum</h3>
-                <p className="text-xs text-amber-700">Sedang memperbarui entri jurnal yang dipilih. Pastikan total debit dan kredit seimbang sebelum disimpan.</p>
+                <h3 className="font-serif italic font-semibold text-amber-900 text-sm sm:text-base">Ubah Jurnal Umum</h3>
+                <p className="text-[11px] sm:text-xs text-amber-700">Sedang memperbarui entri jurnal. Pastikan total debit dan kredit seimbang.</p>
               </div>
               <button
                 type="button"
                 onClick={handleCancelForm}
-                className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 rounded-full font-bold text-xs"
+                className="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 rounded-full font-bold text-xs shrink-0 cursor-pointer"
               >
                 Batal Edit
               </button>
             </div>
           )}
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
             {/* Quick Templates Bar for Super Fast Entry */}
             {!isEditingMode && (
-              <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-slate-50 p-4 rounded-2xl border border-emerald-150 space-y-2">
+              <div className="bg-gradient-to-r from-emerald-50/80 via-teal-50/50 to-slate-50 p-3 sm:p-4 rounded-xl sm:rounded-2xl border border-emerald-150 space-y-2">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-850 uppercase tracking-wider">
-                    <Zap className="w-4 h-4 text-emerald-600 fill-emerald-500" />
-                    <span>Template Cepat Transaksi Jurnal</span>
+                  <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-emerald-850 uppercase tracking-wider">
+                    <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-600 fill-emerald-500" />
+                    <span>Template Cepat Transaksi</span>
                   </div>
-                  <span className="text-[10px] text-slate-400 font-medium">Klik untuk isi otomatis akun & keterangan</span>
+                  <span className="text-[9px] sm:text-[10px] text-slate-400 font-medium">Klik untuk isi otomatis</span>
                 </div>
-                <div className="flex flex-wrap gap-2 pt-1">
+                <div className="flex items-center gap-1.5 sm:gap-2 pt-1 overflow-x-auto no-scrollbar flex-nowrap pb-1">
                   <button
                     type="button"
                     onClick={() => applyTemplate('spp')}
-                    className="px-3 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100/60 text-emerald-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-2.5 sm:px-3 py-1.5 bg-white border border-emerald-200 hover:bg-emerald-100/60 text-emerald-800 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold shadow-2xs transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                   >
-                    <span>⚡ Penerimaan SPP</span>
+                    <span>⚡ SPP</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => applyTemplate('operasional')}
-                    className="px-3 py-1.5 bg-white border border-teal-200 hover:bg-teal-100/60 text-teal-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-2.5 sm:px-3 py-1.5 bg-white border border-teal-200 hover:bg-teal-100/60 text-teal-800 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold shadow-2xs transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                   >
-                    <span>⚡ Operasional / ATK</span>
+                    <span>⚡ Operasional/ATK</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => applyTemplate('gaji')}
-                    className="px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-100/60 text-indigo-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-2.5 sm:px-3 py-1.5 bg-white border border-indigo-200 hover:bg-indigo-100/60 text-indigo-800 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold shadow-2xs transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                   >
-                    <span>⚡ Gaji & Honorarium</span>
+                    <span>⚡ Gaji & Honor</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => applyTemplate('setorBank')}
-                    className="px-3 py-1.5 bg-white border border-sky-200 hover:bg-sky-100/60 text-sky-800 rounded-xl text-xs font-semibold shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer"
+                    className="px-2.5 sm:px-3 py-1.5 bg-white border border-sky-200 hover:bg-sky-100/60 text-sky-800 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-semibold shadow-2xs transition-all flex items-center gap-1 shrink-0 cursor-pointer"
                   >
-                    <span>⚡ Setor Tunai Bank</span>
+                    <span>⚡ Setor Bank</span>
                   </button>
                 </div>
               </div>
@@ -1631,27 +1631,27 @@ export default function Journal() {
       )}
 
       {/* Filters Section */}
-      <div className="bg-white p-6 rounded-3xl border border-natural-border shadow-sm space-y-4">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+      <div className="bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl border border-natural-border shadow-xs space-y-3 sm:space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 sm:gap-4 items-end">
           {/* Text Search */}
-          <div className="flex-1 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Cari Jurnal</span>
+          <div className="sm:col-span-2 lg:col-span-2 space-y-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Cari Jurnal</span>
             <input
               type="text"
-              placeholder="Cari keterangan, referensi, akun, atau PIC..."
+              placeholder="Keterangan, ref, PIC..."
               value={filterText}
               onChange={(e) => setFilterText(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+              className="w-full px-3.5 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
             />
           </div>
 
           {/* Account Filter */}
-          <div className="w-full md:w-56 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter Akun</span>
+          <div className="space-y-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Filter Akun</span>
             <select
               value={filterAccount}
               onChange={(e) => setFilterAccount(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
             >
               <option value="">Semua Akun</option>
               {accounts.sort((a,b) => a.code.localeCompare(b.code)).map(acc => (
@@ -1661,12 +1661,12 @@ export default function Journal() {
           </div>
 
           {/* Unit Filter */}
-          <div className="w-full md:w-36 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Unit Sekolah</span>
+          <div className="space-y-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Unit Sekolah</span>
             <select
               value={filterSchoolUnit}
               onChange={(e) => setFilterSchoolUnit(e.target.value as any)}
-              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white"
             >
               <option value="all">Consolidated</option>
               <option value="SMP">SMP</option>
@@ -1676,37 +1676,39 @@ export default function Journal() {
           </div>
 
           {/* Start Date */}
-          <div className="w-full md:w-44 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Mulai Tanggal</span>
+          <div className="space-y-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Mulai Tanggal</span>
             <input
               type="date"
               value={filterStartDate}
               onChange={(e) => setFilterStartDate(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
             />
           </div>
 
           {/* End Date */}
-          <div className="w-full md:w-44 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Sampai Tanggal</span>
+          <div className="space-y-1">
+            <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Sampai Tanggal</span>
             <input
               type="date"
               value={filterEndDate}
               onChange={(e) => setFilterEndDate(e.target.value)}
-              className="w-full px-4 py-2 text-sm border border-slate-205 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
+              className="w-full px-3 py-2 text-xs sm:text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none hover:border-slate-300 transition-colors"
             />
           </div>
+        </div>
 
-          {/* Page Size Option */}
-          <div className="w-full md:w-36 space-y-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest block">Tampilkan</span>
+        {/* Filters bottom row */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1 border-t border-slate-100">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Tampilkan:</span>
             <select
               value={pageSize}
               onChange={(e) => {
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="w-full px-4 py-2 text-sm border border-slate-250 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white font-medium text-slate-700"
+              className="px-2.5 py-1 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none cursor-pointer bg-white font-medium text-slate-700"
             >
               <option value={10}>10 Baris</option>
               <option value={25}>25 Baris</option>
@@ -1716,13 +1718,12 @@ export default function Journal() {
             </select>
           </div>
 
-          {/* Reset Filters */}
           {(filterText || filterAccount || filterStartDate || filterEndDate || filterSchoolUnit !== 'all') && (
             <button
               onClick={handleResetFilters}
-              className="px-4 py-2 bg-slate-50 border border-slate-205 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1.5 h-[38px] shrink-0 cursor-pointer"
+              className="px-3 py-1 bg-slate-50 border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-100 transition-colors flex items-center gap-1 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" /> Bersihkan
+              <X className="w-3.5 h-3.5" /> Bersihkan Filter
             </button>
           )}
         </div>
@@ -1735,19 +1736,19 @@ export default function Journal() {
             initial={{ opacity: 0, y: 15 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 15 }}
-            className="bg-natural-primary text-white p-4 rounded-3xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-md border border-emerald-850"
+            className="bg-natural-primary text-white p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl flex flex-col sm:flex-row justify-between items-center gap-3 shadow-md border border-emerald-850"
           >
             <div className="flex items-center gap-2">
-              <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold font-mono text-emerald-100">
+              <span className="bg-white/20 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono text-emerald-100">
                 {selectedEntryIds.length}
               </span>
-              <span className="text-sm font-medium font-serif italic text-emerald-50">Entri Jurnal Umum terpilih untuk tindakan massal</span>
+              <span className="text-xs sm:text-sm font-medium font-serif italic text-emerald-50">Entri Jurnal terpilih</span>
             </div>
             <button
               onClick={handleBulkDeleteClick}
-              className="w-full sm:w-auto px-5 py-2.5 bg-rose-650 hover:bg-rose-700 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-sm cursor-pointer border border-rose-500"
+              className="w-full sm:w-auto px-4 py-2 bg-rose-650 hover:bg-rose-700 text-white rounded-full text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors shadow-xs cursor-pointer border border-rose-500"
             >
-              <Trash2 className="w-4 h-4" /> Hapus Terpilih
+              <Trash2 className="w-3.5 h-3.5" /> Hapus Terpilih
             </button>
           </motion.div>
         )}
@@ -1765,36 +1766,37 @@ export default function Journal() {
         const endIndex = pageSize === 0 ? totalItems : Math.min(safeCurrentPage * pageSize, totalItems);
 
         return (
-          <div className="bg-white rounded-3xl border border-natural-border shadow-sm overflow-hidden">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-gray-50/50 border-b border-natural-border">
-                  {!isViewer && (
-                    <th className="px-4 py-4 text-center w-12 border-r border-natural-border/30 bg-slate-55/10">
-                      <input
-                        type="checkbox"
-                        checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
-                        ref={(input) => {
-                          if (input) {
-                            input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
-                          }
-                        }}
-                        onChange={(e) => handleSelectAllEntries(e.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
-                        title="Pilih semua baris yang terfilter"
-                      />
-                    </th>
-                  )}
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
-                  <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
-                  {!isViewer && <th className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
+          <div className="bg-white rounded-2xl sm:rounded-3xl border border-natural-border shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px] text-left border-collapse">
+                <thead>
+                  <tr className="bg-gray-50/50 border-b border-natural-border">
+                    {!isViewer && (
+                      <th className="px-3 sm:px-4 py-3.5 text-center w-10 sm:w-12 border-r border-natural-border/30 bg-slate-55/10">
+                        <input
+                          type="checkbox"
+                          checked={filteredEntries.length > 0 && selectedEntryIds.length === filteredEntries.length}
+                          ref={(input) => {
+                            if (input) {
+                              input.indeterminate = selectedEntryIds.length > 0 && selectedEntryIds.length < filteredEntries.length;
+                            }
+                          }}
+                          onChange={(e) => handleSelectAllEntries(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-emerald-650 focus:ring-emerald-500 cursor-pointer"
+                          title="Pilih semua baris yang terfilter"
+                        />
+                      </th>
+                    )}
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">Tanggal</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referensi</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">Keterangan</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest">Akun</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Debit</th>
+                    <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest text-right">Kredit</th>
+                    {!isViewer && <th className="px-4 sm:px-6 py-3.5 text-[9px] sm:text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Aksi</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
                 {entries.length === 0 ? (
                   <tr>
                     <td colSpan={isViewer ? 6 : 8} className="px-6 py-12 text-center text-slate-400">Belum ada transaksi jurnal.</td>
@@ -1897,6 +1899,7 @@ export default function Journal() {
                 )}
               </tbody>
             </table>
+          </div>
 
             {/* Pagination Controls Footer */}
             {sortedAndFilteredEntries.length > 0 && (

@@ -69,7 +69,8 @@ export const createDebt = async (
   isUangMuka: boolean = false,
   picName: string = '',
   cashAccountId?: string,
-  schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum'
+  schoolUnit: 'SMP' | 'SMA' | 'Umum' = 'Umum',
+  customRefNumber?: string
 ): Promise<string> => {
   try {
     const remainingBalance = isUangMuka ? totalAmount : (totalAmount - downPayment);
@@ -132,9 +133,11 @@ export const createDebt = async (
       }
     }
 
-    const refNum = isUangMuka 
-      ? generateDpRefNumber() 
-      : (type === 'Hutang' ? generateHutangRefNumber() : generatePiutangRefNumber());
+    const refNum = customRefNumber?.trim()
+      ? customRefNumber.trim()
+      : (isUangMuka 
+          ? generateDpRefNumber() 
+          : (type === 'Hutang' ? generateHutangRefNumber() : generatePiutangRefNumber()));
 
     // 2. Draft & save automatically balanced Journal entry
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
@@ -167,6 +170,7 @@ export const createDebt = async (
       journalId: journalRef.id,
       isUangMuka,
       picName,
+      reference: refNum,
       dpRefNumber: refNum,
       cashAccountId: kasAccount?.id || '',
       cashAccountName: kasAccount?.name || '',
@@ -222,7 +226,7 @@ export const addDebtPayment = async (
     }
 
     // 2. Add as General Journal entry
-    const paymentRef = currentData.dpRefNumber || (currentData.type === 'Piutang' ? 'PT-BYR' : 'HT-BYR');
+    const paymentRef = currentData.reference || currentData.dpRefNumber || (currentData.type === 'Piutang' ? 'PT-BYR' : 'HT-BYR');
     const journalRef = await addDoc(collection(db, 'journal_entries'), {
       date: Timestamp.fromDate(paymentDate),
       description: `Angsuran ${currentData.type}: ${currentData.name} (${paymentNotes || 'Tanpa Memo'})`,
@@ -279,6 +283,7 @@ export const updateDebtDetails = async (
     remarks: string;
     picName?: string;
     schoolUnit?: 'Umum' | 'SMP' | 'SMA';
+    refNumber?: string;
   }
 ): Promise<void> => {
   const docRef = doc(db, COLLECTION_PATH, debtId);
@@ -354,6 +359,10 @@ export const updateDebtDetails = async (
         if (updateData.schoolUnit !== undefined) {
           updateJournalPayload.schoolUnit = updateData.schoolUnit;
         }
+        if (updateData.refNumber?.trim()) {
+          updateJournalPayload.reference = updateData.refNumber.trim();
+          updateJournalPayload.dpRefNumber = updateData.refNumber.trim();
+        }
         await updateDoc(journalDocRef, updateJournalPayload);
       }
     }
@@ -388,6 +397,11 @@ export const updateDebtDetails = async (
 
     if (updateData.schoolUnit !== undefined) {
       payload.schoolUnit = updateData.schoolUnit;
+    }
+
+    if (updateData.refNumber?.trim()) {
+      payload.reference = updateData.refNumber.trim();
+      payload.dpRefNumber = updateData.refNumber.trim();
     }
 
     await updateDoc(docRef, payload);
@@ -569,6 +583,7 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           journalId,
           isUangMuka: isUM,
           picName: pic,
+          reference: refNum,
           dpRefNumber: refNum,
           schoolUnit: journalEntry.schoolUnit || 'Umum'
         });
@@ -637,6 +652,7 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
           createdAt: Timestamp.now(),
           journalId,
           picName: pic,
+          reference: refNum,
           dpRefNumber: refNum,
           schoolUnit: journalEntry.schoolUnit || 'Umum'
         });
@@ -647,16 +663,25 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       else if (isPiutangAccount && line.credit > 0) {
         let matchedDebt: any = null;
 
-        // Prioritize matching explicitly by dpRefNumber or reference if provided
-        const linkedRefNum = journalEntry.dpRefNumber || journalEntry.reference;
+        // Prioritize matching explicitly by reference or dpRefNumber if provided
+        const linkedRefNum = journalEntry.reference || journalEntry.dpRefNumber;
         if (linkedRefNum) {
           const qRef = query(
             collection(db, COLLECTION_PATH),
-            where('dpRefNumber', '==', linkedRefNum)
+            where('reference', '==', linkedRefNum)
           );
           const refSnap = await getDocs(qRef);
           if (!refSnap.empty) {
             matchedDebt = { id: refSnap.docs[0].id, ...refSnap.docs[0].data() };
+          } else {
+            const qDp = query(
+              collection(db, COLLECTION_PATH),
+              where('dpRefNumber', '==', linkedRefNum)
+            );
+            const dpSnap = await getDocs(qDp);
+            if (!dpSnap.empty) {
+              matchedDebt = { id: dpSnap.docs[0].id, ...dpSnap.docs[0].data() };
+            }
           }
         }
 
@@ -725,16 +750,25 @@ export const syncJournalToDebtControl = async (journalEntry: any): Promise<void>
       else if (isHutangAccount && line.debit > 0) {
         let matchedDebt: any = null;
 
-        // Prioritize matching explicitly by dpRefNumber or reference if provided
-        const linkedRefNum = journalEntry.dpRefNumber || journalEntry.reference;
+        // Prioritize matching explicitly by reference or dpRefNumber if provided
+        const linkedRefNum = journalEntry.reference || journalEntry.dpRefNumber;
         if (linkedRefNum) {
           const qRef = query(
             collection(db, COLLECTION_PATH),
-            where('dpRefNumber', '==', linkedRefNum)
+            where('reference', '==', linkedRefNum)
           );
           const refSnap = await getDocs(qRef);
           if (!refSnap.empty) {
             matchedDebt = { id: refSnap.docs[0].id, ...refSnap.docs[0].data() };
+          } else {
+            const qDp = query(
+              collection(db, COLLECTION_PATH),
+              where('dpRefNumber', '==', linkedRefNum)
+            );
+            const dpSnap = await getDocs(qDp);
+            if (!dpSnap.empty) {
+              matchedDebt = { id: dpSnap.docs[0].id, ...dpSnap.docs[0].data() };
+            }
           }
         }
 

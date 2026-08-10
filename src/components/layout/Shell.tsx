@@ -31,11 +31,17 @@ interface ShellProps {
 
 export const Shell: React.FC<ShellProps> = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isMobileDrawerOpen, setIsMobileDrawerOpen] = useState(false);
   const { user, userRole, isLoadingRole, hasPermission } = useUserRole();
   const [authError, setAuthError] = useState<string | null>(null);
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const location = useLocation();
   const { settings, t } = useSettings();
+
+  // Close mobile drawer on route transition
+  useEffect(() => {
+    setIsMobileDrawerOpen(false);
+  }, [location.pathname]);
 
 
   const handleLogin = async () => {
@@ -175,10 +181,10 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
 
   return (
     <div className="min-h-screen bg-natural-bg flex text-natural-text" style={{ fontFamily: 'var(--font-sans)', direction: settings.language === 'ar' ? 'rtl' : 'ltr' }}>
-      {/* Sidebar */}
+      {/* Desktop Sidebar */}
       <aside 
         className={cn(
-          "bg-natural-primary flex flex-col text-white shadow-2xl transition-all duration-300 z-20 shrink-0 print:hidden",
+          "bg-natural-primary hidden md:flex flex-col text-white shadow-2xl transition-all duration-300 z-20 shrink-0 print:hidden",
           isSidebarOpen ? "w-64" : "w-19"
         )}
       >
@@ -204,7 +210,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
           </div>
         </div>
 
-        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto no-scrollbar">
           {navItems.map((item) => (
             <Link
               key={item.path}
@@ -252,49 +258,251 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         </div>
       </aside>
 
+      {/* Mobile Slide-Over Drawer Modal */}
+      <AnimatePresence>
+        {isMobileDrawerOpen && (
+          <div className="fixed inset-0 z-50 md:hidden flex">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={() => setIsMobileDrawerOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-xs"
+            />
+
+            {/* Drawer Panel */}
+            <motion.div
+              initial={{ x: settings.language === 'ar' ? '100%' : '-100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: settings.language === 'ar' ? '100%' : '-100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 280 }}
+              className="relative w-4/5 max-w-xs bg-natural-primary text-white flex flex-col h-full shadow-2xl z-10"
+              style={{ textAlign: settings.language === 'ar' ? 'right' : 'left' }}
+            >
+              {/* Drawer Header */}
+              <div className="p-4 border-b border-white/10 flex items-center justify-between">
+                <div className="flex items-center gap-2.5 overflow-hidden">
+                  <div className="w-9 h-9 bg-white/15 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 overflow-hidden">
+                    {settings.logoType === 'custom' && settings.customLogoUrl ? (
+                      <img src={settings.customLogoUrl} alt="Logo" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                    ) : settings.logoType === 'finance' ? (
+                      <Receipt className="w-4 h-4 text-white" />
+                    ) : settings.logoType === 'shield' ? (
+                      <Shield className="w-4 h-4 text-white" />
+                    ) : (
+                      <School className="w-4 h-4 text-white" />
+                    )}
+                  </div>
+                  <div className="overflow-hidden">
+                    <h1 className="text-xs font-bold leading-tight truncate uppercase tracking-wide">{settings.systemName}</h1>
+                    <p className="text-[8px] text-white/50 tracking-wider uppercase truncate">{settings.systemSubName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsMobileDrawerOpen(false)}
+                  className="p-1.5 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Drawer Navigation */}
+              <nav className="flex-1 p-3 space-y-1 overflow-y-auto no-scrollbar">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileDrawerOpen(false)}
+                    className={cn(
+                      "flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold tracking-wide transition-all border border-transparent",
+                      location.pathname === item.path 
+                        ? "bg-white/15 text-white border-white/15 shadow-xs font-bold" 
+                        : "text-white/75 hover:bg-white/5 hover:text-white"
+                    )}
+                  >
+                    <item.icon className={cn(
+                      "w-4 h-4 shrink-0",
+                      location.pathname === item.path ? "text-white" : "text-white/50"
+                    )} />
+                    <span className="truncate">{item.name}</span>
+                  </Link>
+                ))}
+              </nav>
+
+              {/* Drawer User Profile & Logout */}
+              <div className="p-3 border-t border-white/10 shrink-0">
+                <div className="bg-white/10 rounded-xl p-3">
+                  <div className="flex items-center gap-2.5">
+                    <img 
+                      src={user.photoURL} 
+                      alt={user.displayName} 
+                      className="w-8 h-8 rounded-full border border-white/20 bg-white/10 shrink-0"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold truncate text-white/90">{user.displayName}</p>
+                      <p className="text-[9px] text-emerald-300 font-medium truncate">{user.email}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={handleLogout} 
+                    className="w-full mt-2.5 pt-2 border-t border-white/10 flex items-center justify-center gap-1.5 text-xs text-white/60 hover:text-rose-300 transition-colors font-medium cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>{t('signOut')}</span>
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* Main Content */}
       <main className="flex-1 flex flex-col overflow-hidden relative" style={{ textAlign: settings.language === 'ar' ? 'right' : 'left' }}>
-        <header className="h-16 bg-white border-b border-natural-border flex items-center justify-between px-6 shrink-0 print:hidden">
-          <div className="flex items-center gap-3">
+        {/* Top Header */}
+        <header className="h-14 sm:h-16 bg-white border-b border-natural-border flex items-center justify-between px-3.5 sm:px-6 shrink-0 print:hidden">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            {/* Desktop Collapse Toggle */}
             <button 
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary transition-colors cursor-pointer border border-transparent hover:border-natural-border"
+              className="hidden md:flex p-1.5 hover:bg-natural-bg rounded-lg text-natural-primary transition-colors cursor-pointer border border-transparent hover:border-natural-border"
+              title="Toggle Sidebar"
             >
               <Menu className="w-4 h-4" />
             </button>
-            <div>
-              <h2 className="text-base font-serif italic text-natural-primary font-bold">
+
+            {/* Mobile Drawer Trigger */}
+            <button 
+              onClick={() => setIsMobileDrawerOpen(true)}
+              className="md:hidden p-2 -ml-1 text-natural-primary hover:bg-slate-100 rounded-xl transition-colors cursor-pointer active:scale-95"
+              aria-label="Buka Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+
+            <div className="min-w-0">
+              <h2 className="text-sm sm:text-base font-serif italic text-natural-primary font-bold truncate">
                 {navItems.find(i => i.path === location.pathname)?.name || t('settings')}
               </h2>
-              <p className="text-[9px] text-gray-400 uppercase tracking-widest font-sans font-semibold">
+              <p className="text-[8px] sm:text-[9px] text-gray-400 uppercase tracking-widest font-sans font-semibold truncate">
                 {settings.systemName}
               </p>
             </div>
           </div>
           
-          <div className="flex items-center gap-4">
-             <div className="text-[10px] text-gray-400 uppercase tracking-widest font-bold font-mono hidden sm:block bg-slate-50 border border-natural-border px-3 py-1 rounded-full">
+          <div className="flex items-center gap-2.5 sm:gap-4">
+             <div className="text-[9px] sm:text-[10px] text-gray-500 uppercase tracking-wider font-bold font-mono hidden sm:block bg-slate-50 border border-natural-border px-3 py-1 rounded-full">
                {new Date().toLocaleDateString(
                  settings.language === 'en' ? 'en-US' : (settings.language === 'ar' ? 'ar-SA' : 'id-ID'), 
-                 { month: 'long', year: 'numeric' }
+                 { month: 'short', year: 'numeric' }
                )}
              </div>
-             <img 
-               src={user.photoURL} 
-               alt={user.displayName} 
-               className="w-8 h-8 rounded-full border border-natural-border shadow-sm bg-white"
-             />
+             <button
+               onClick={() => setIsMobileDrawerOpen(true)}
+               className="md:cursor-default"
+               title={user.displayName}
+             >
+               <img 
+                 src={user.photoURL} 
+                 alt={user.displayName} 
+                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-full border border-natural-border shadow-xs bg-white"
+               />
+             </button>
           </div>
         </header>
 
+        {/* Page Content Scroll Container */}
         <section className="flex-1 overflow-y-auto bg-natural-bg/50 scroll-smooth">
-          <div className="max-w-7xl mx-auto p-6 sm:p-8">
+          <div className="max-w-7xl mx-auto p-3 sm:p-6 lg:p-8 pb-20 md:pb-8">
             {children}
           </div>
         </section>
 
-        {/* Footer */}
-        <footer className="px-6 py-3 bg-white/50 border-t border-natural-border flex justify-between items-center text-[9px] shrink-0 font-medium print:hidden">
+        {/* Minimalist Mobile Bottom Navigation Bar */}
+        <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-md border-t border-natural-border/80 px-2 py-1.5 safe-bottom flex items-center justify-around shadow-lg print:hidden">
+          <Link
+            to="/"
+            className={cn(
+              "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all",
+              location.pathname === '/' 
+                ? "text-natural-primary font-bold bg-natural-primary/10" 
+                : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <LayoutDashboard className="w-4 h-4" />
+            <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap">Dashboard</span>
+          </Link>
+
+          {hasPermission('canJournal') && (
+            <Link
+              to="/jurnal"
+              className={cn(
+                "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all",
+                location.pathname === '/jurnal' 
+                  ? "text-natural-primary font-bold bg-natural-primary/10" 
+                  : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              <BookOpen className="w-4 h-4" />
+              <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap">Jurnal</span>
+            </Link>
+          )}
+
+          {(hasPermission('canJournal') || hasPermission('canCOA')) && (
+            <Link
+              to="/buku-besar"
+              className={cn(
+                "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all",
+                location.pathname === '/buku-besar' 
+                  ? "text-natural-primary font-bold bg-natural-primary/10" 
+                  : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              <Database className="w-4 h-4" />
+              <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap">Buku Besar</span>
+            </Link>
+          )}
+
+          {hasPermission('canDebt') && (
+            <Link
+              to="/hutang-piutang"
+              className={cn(
+                "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all",
+                location.pathname === '/hutang-piutang' 
+                  ? "text-natural-primary font-bold bg-natural-primary/10" 
+                  : "text-slate-400 hover:text-slate-600"
+              )}
+            >
+              <Users className="w-4 h-4" />
+              <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap">Hutang/Piutang</span>
+            </Link>
+          )}
+
+          {/* Menu Drawer Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsMobileDrawerOpen(true)}
+            className={cn(
+              "flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer",
+              ['/laporan', '/faktur', '/coa', '/aset-tetap', '/pengaturan', '/trash', '/akses-log'].includes(location.pathname)
+                ? "text-natural-primary font-bold bg-natural-primary/10" 
+                : "text-slate-400 hover:text-slate-600"
+            )}
+          >
+            <div className="relative">
+              <Sliders className="w-4 h-4" />
+              {['/laporan', '/faktur', '/coa', '/aset-tetap', '/pengaturan', '/trash', '/akses-log'].includes(location.pathname) && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-natural-primary" />
+              )}
+            </div>
+            <span className="text-[10px] tracking-tight mt-0.5 whitespace-nowrap">Menu</span>
+          </button>
+        </nav>
+
+        {/* Desktop Footer */}
+        <footer className="hidden md:flex px-6 py-3 bg-white/50 border-t border-natural-border justify-between items-center text-[9px] shrink-0 font-medium print:hidden">
           <p className="text-gray-400">
             {settings.language === 'en' ? 'Accounting Support SAK ETAP & PSAK 109 • Nonprofit School Ledger System' : (settings.language === 'ar' ? 'دعم المحاسبة معايير SAK ETAP و PSAK 109 • النظام المالي المدرسي' : 'Bantuan Akuntansi SAK ETAP & PSAK 109 • Sistem Dashboard Akuntansi Sekolah')}
           </p>

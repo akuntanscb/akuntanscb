@@ -84,6 +84,7 @@ export interface DebtReceivable {
   isUangMuka?: boolean;
   picName?: string;
   dpRefNumber?: string;
+  reference?: string;
   journalId?: string;
   cashAccountId?: string;
   cashAccountName?: string;

@@ -15,6 +15,22 @@
 @layer base {
   body {
     @apply font-sans antialiased bg-natural-bg text-natural-text;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Minimalist scrollbar and touch utilities */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .safe-bottom {
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
   }
 }
 
