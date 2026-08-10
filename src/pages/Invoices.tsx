@@ -1225,7 +1225,7 @@ export default function Invoices() {
                   {/* KOP SURAT */}
                   <div className="text-center border-b-2 border-double border-slate-900 pb-5 space-y-1">
                     <h2 className="text-xl font-bold font-serif uppercase tracking-normal text-slate-900">SEKOLAH CENDEKIA BAZNAS</h2>
-                    <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest font-semibold">Sistem Informasi Akuntansi</p>
+                    <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest font-semibold">Sistem Dashboard Akuntansi</p>
                     <p className="text-[9px] text-slate-400 font-sans leading-relaxed">Jl. KH. Umar Cirangkong Ds. Cempang No. 14 Kec. Cibungbulang Kab. Bogor.</p>
                   </div>
 
@@ -1336,7 +1336,7 @@ export default function Invoices() {
                   {/* Warning / Disclaimers */}
                   <div className="pt-2">
                     <p className="text-[8px] text-slate-400 leading-relaxed font-sans italic">
-                      * Dokumen ini sah dan dikeluarkan secara resmi dari basis data Sistem Informasi Akuntansi Sekolah Cendekia Baznas. Tanda tangan di bawah adalah representasi persetujuan administratif internal kepengurusan keuangan sekolah.
+                      * Dokumen ini sah dan dikeluarkan secara resmi dari basis data SIDANI (Sistem Dashboard Akuntansi) Sekolah Cendekia Baznas. Tanda tangan di bawah adalah representasi persetujuan administratif internal kepengurusan keuangan sekolah.
                     </p>
                   </div>
 

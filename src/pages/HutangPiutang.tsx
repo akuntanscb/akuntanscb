@@ -1966,7 +1966,7 @@ export default function HutangPiutang() {
         {/* Header (KOP SURAT) */}
         <div className="text-center border-b-2 border-double border-slate-900 pb-5 space-y-1">
           <h2 className="text-xl font-bold font-serif uppercase tracking-normal text-slate-1000">SEKOLAH CENDEKIA BAZNAS</h2>
-          <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest font-semibold">Sistem Informasi Akuntansi</p>
+          <p className="text-[10px] font-sans text-slate-500 uppercase tracking-widest font-semibold">Sistem Dashboard Akuntansi</p>
           <p className="text-[9px] text-slate-500 font-sans">Jl. KH. Umar Cirangkong Ds. Cempang No. 14 Kec. Cibungbulang Kab. Bogor.</p>
         </div>
 

@@ -130,7 +130,7 @@ export default function Settings() {
       const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData, null, 2));
       const downloadAnchor = document.createElement('a');
       downloadAnchor.setAttribute("href", dataStr);
-      downloadAnchor.setAttribute("download", `BACKUP_SIA_SCB_${new Date().toISOString().split('T')[0]}_${backupData.backupMetadata.timestamp.replace(/[:.]/g, '-')}.json`);
+      downloadAnchor.setAttribute("download", `BACKUP_SIDANI_SCB_${new Date().toISOString().split('T')[0]}_${backupData.backupMetadata.timestamp.replace(/[:.]/g, '-')}.json`);
       document.body.appendChild(downloadAnchor);
       downloadAnchor.click();
       downloadAnchor.remove();
@@ -417,7 +417,7 @@ export default function Settings() {
                     value={systemName}
                     onChange={(e) => setSystemName(e.target.value)}
                     className="w-full px-4 py-2.5 text-sm border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none transition-all font-semibold"
-                    placeholder="Contoh: SIA Cendekia Baznas"
+                    placeholder="Contoh: SIDANI Cendekia Baznas"
                   />
                 </div>
 

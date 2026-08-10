@@ -90,7 +90,7 @@ export const exportCompleteDatabase = async (): Promise<BackupData> => {
 
     // Retrieve active system name from settings
     const systemSettingsSnap = await getDocs(collection(db, 'system_settings'));
-    let systemName = 'SIA Cendekia Baznas';
+    let systemName = 'SIDANI Cendekia Baznas';
     if (!systemSettingsSnap.empty) {
       const activeSettings = systemSettingsSnap.docs[0].data();
       if (activeSettings?.systemName) {
@@ -138,7 +138,7 @@ export const validateBackupSchema = (parsedJson: any): parsedJson is BackupData 
       timestamp: new Date().toISOString(),
       version: '1.2.0',
       creatorEmail: auth.currentUser?.email || 'system_imported',
-      systemName: 'SIA Cendekia Baznas',
+      systemName: 'SIDANI Cendekia Baznas',
       totalRecords: 0
     };
   } else if (parsedJson.data && typeof parsedJson.data === 'object' && !parsedJson.backupMetadata) {
@@ -146,7 +146,7 @@ export const validateBackupSchema = (parsedJson: any): parsedJson is BackupData 
       timestamp: new Date().toISOString(),
       version: '1.2.0',
       creatorEmail: auth.currentUser?.email || 'system_imported',
-      systemName: 'SIA Cendekia Baznas',
+      systemName: 'SIDANI Cendekia Baznas',
       totalRecords: 0
     };
   }

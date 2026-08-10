@@ -296,7 +296,7 @@ export const Shell: React.FC<ShellProps> = ({ children }) => {
         {/* Footer */}
         <footer className="px-6 py-3 bg-white/50 border-t border-natural-border flex justify-between items-center text-[9px] shrink-0 font-medium print:hidden">
           <p className="text-gray-400">
-            {settings.language === 'en' ? 'Accounting Support SAK ETAP & PSAK 109 • Nonprofit School Ledger System' : (settings.language === 'ar' ? 'دعم المحاسبة معايير SAK ETAP و PSAK 109 • النظام المالي المدرسي' : 'Bantuan Akuntansi SAK ETAP & PSAK 109 • Sistem Informasi Sekolah')}
+            {settings.language === 'en' ? 'Accounting Support SAK ETAP & PSAK 109 • Nonprofit School Ledger System' : (settings.language === 'ar' ? 'دعم المحاسبة معايير SAK ETAP و PSAK 109 • النظام المالي المدرسي' : 'Bantuan Akuntansi SAK ETAP & PSAK 109 • Sistem Dashboard Akuntansi Sekolah')}
           </p>
           <div className="flex gap-4 text-natural-primary font-bold opacity-60">
             <span>{settings.language === 'en' ? 'Status: Synced' : (settings.language === 'ar' ? 'الحالة: متزامن' : 'Status: Sinkron')}</span>

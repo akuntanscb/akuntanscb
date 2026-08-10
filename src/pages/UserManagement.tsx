@@ -287,7 +287,7 @@ export default function UserManagement() {
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.setAttribute('href', url);
-      link.setAttribute('download', `Log_Aktivitas_SIA_SCB_${new Date().toISOString().split('T')[0]}.csv`);
+      link.setAttribute('download', `Log_Aktivitas_SIDANI_SCB_${new Date().toISOString().split('T')[0]}.csv`);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
       link.click();

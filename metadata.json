@@ -1,6 +1,6 @@
 {
-  "name": "SIA Sekolah Cendekia Baznas",
-  "description": "Sistem Informasi Akuntansi nirlaba untuk Sekolah Cendekia Baznas, mengelola dana zakat, donasi, aset, dan pelaporan keuangan otomatis.",
+  "name": "SIDANI Sekolah Cendekia Baznas",
+  "description": "SIDANI (Sistem Dashboard Akuntansi) nirlaba untuk Sekolah Cendekia Baznas, mengelola dana zakat, donasi, aset, dan pelaporan keuangan otomatis.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

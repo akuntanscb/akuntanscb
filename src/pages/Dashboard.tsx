@@ -98,7 +98,7 @@ export default function Dashboard() {
       <header className="flex justify-between items-end">
         <div>
           <h1 className="text-3xl font-serif italic text-natural-primary">Ringkasan Aktivitas Dana</h1>
-          <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Sistem Informasi Akuntansi Nirlaba</p>
+          <p className="text-xs text-gray-400 uppercase tracking-widest mt-1">Sistem Dashboard Akuntansi Nirlaba</p>
         </div>
       </header>
 
